@@ -155,6 +155,7 @@ end
 function buildSparseA(k,X,Y,D0, n ,m)
 # function that build the sparsigying preconditioner
 
+
     Ind = reshape(collect(1:n*m),n,m);
 
     (Indices, Values) = entriesSparseA(k,X,Y,D0, n ,m);
@@ -226,8 +227,156 @@ function buildSparseA(k,X,Y,D0, n ,m)
     return A;
 end
 
+function entriesSparseG(k,X,Y,D0, n ,m)
+  # we need to have an even number of points
+  @assert mod(length(X),2) == 1
+  Entries  = Array{Complex128}[]
 
-function createIndices(row, col, val)
+  N = n*m;
+
+  # computing the entries for the interior
+  indVol = round(Integer, n*(m-1)/2 + (n+1)/2 + [-1,0,1,n,n-1,n+1,-n,-n-1, -n+1]);
+  GSampled = sampleG(k,X,Y,indVol, D0)[:,indVol];
+
+  push!(Entries,GSampled);
+
+  # for  x = xmin, y = 0
+  indFz1 = round(Integer, n*(m-1)/2 +1 + [0,1,n,n+1,-n, -n+1]);
+  GSampled = sampleG(k,X,Y,indFz1, D0)[:,indFz1];
+
+  push!(Entries,GSampled);
+
+  # for  x = xmax, y = 0
+  indFz2 = round(Integer, n*(n-1)/2 + [-1,0,n,n-1,-n, -n-1]);
+  GSampled = sampleG(k,X,Y,indFz2, D0)[:,indFz2];
+
+  push!(Entries,GSampled);
+
+  # for  y = ymin, x = 0
+  indFx1 = round(Integer, (n+1)/2 + [-1,0,1,n,n+1, n-1]);
+  GSampled = sampleG(k,X,Y,indFx1, D0)[:,indFx1];
+
+  push!(Entries,GSampled);
+
+
+  # for  y = ymin, x = 0
+  indFx2 = round(Integer, N - (n+1)/2 + [-1,0,1,-n,-n+1, -n-1]);
+  GSampled = sampleG(k,X,Y,indFx2, D0)[:,indFx2];
+
+  push!(Entries,GSampled);
+
+  # For the corners
+  indcorner1 = round(Integer, 1 + [0,1, n,n+1]);
+  indcorner2 = round(Integer, n + [0,-1, n,n-1]);
+  indcorner3 = round(Integer, n*m-n+1 + [0,1, -n,-n+1]);
+  indcorner4 = round(Integer, n*m + [0,-1, -n,-n-1]);
+
+  GSampled = sampleG(k,X,Y,indcorner1, D0)[:,indcorner1];
+  push!(Entries,GSampled);
+
+
+  #'
+  GSampled = sampleG(k,X,Y,indcorner2, D0)[:,indcorner2];
+  push!(Entries,GSampled);
+
+  #'
+  GSampled = sampleG(k,X,Y,indcorner3, D0)[:,indcorner3];
+  push!(Entries,GSampled);
+
+  #'
+  GSampled = sampleG(k,X,Y,indcorner4, D0)[:,indcorner4];
+  push!(Entries,GSampled);
+
+  return Entries
+end
+
+
+function buildSparseAG(k,X,Y,D0, n ,m)
+# function that build the sparsigying preconditioner
+
+
+    Ind = reshape(collect(1:n*m),n,m);
+
+    (Indices, Values) = entriesSparseA(k,X,Y,D0, n ,m);
+    Entries = entriesSparseG(k,X,Y,D0, n ,m);
+
+    ValuesAG = Values[1]*Entries[1];
+    (rowA, colA, valA) = createIndices(Ind[2:end-1,2:end-1][:],
+                                    Indices[1][:], ValuesAG[:]);
+
+    ValuesAG = Values[2]*Entries[2];
+    (Row, Col, Val) = createIndices(Ind[1,2:end-1][:],
+                                    Indices[2][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row);
+    colA = vcat(colA,Col);
+    valA = vcat(valA,Val);
+
+    ValuesAG = Values[3]*Entries[3];
+    (Row, Col, Val) = createIndices(Ind[end,2:end-1][:],
+                                    Indices[3][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row)
+    colA = vcat(colA,Col)
+    valA = vcat(valA,Val)
+
+    ValuesAG = Values[4]*Entries[4];
+    (Row, Col, Val) = createIndices(Ind[2:end-1,1][:],
+                                    Indices[4][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row)
+    colA = vcat(colA,Col)
+    valA = vcat(valA,Val)
+
+    ValuesAG = Values[5]*Entries[5];
+    (Row, Col, Val) = createIndices(Ind[2:end-1,end][:],
+                                    Indices[5][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row)
+    colA = vcat(colA,Col)
+    valA = vcat(valA,Val)
+
+    ValuesAG = Values[6]*Entries[6];
+    (Row, Col, Val) = createIndices(Ind[1,1],
+                                    Indices[6][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row)
+    colA = vcat(colA,Col)
+    valA = vcat(valA,Val)
+
+    ValuesAG = Values[7]*Entries[7];
+    (Row, Col, Val) = createIndices(Ind[end,1],
+                                    Indices[7][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row)
+    colA = vcat(colA,Col)
+    valA = vcat(valA,Val)
+
+    ValuesAG = Values[8]*Entries[8];
+    (Row, Col, Val) = createIndices(Ind[1,end],
+                                    Indices[8][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row)
+    colA = vcat(colA,Col)
+    valA = vcat(valA,Val)
+
+    ValuesAG = Values[9]*Entries[9];
+    (Row, Col, Val) = createIndices(Ind[end,end],
+                                    Indices[9][:], ValuesAG[:]);
+
+    rowA = vcat(rowA,Row)
+    colA = vcat(colA,Col)
+    valA = vcat(valA,Val)
+
+
+    AG = sparse(rowA,colA,valA);
+
+    return AG;
+end
+
+ 
+
+function createIndices(row::Array{Int64,1}, col::Array{Int64,1}, val::Array{Complex128,1})
 
   @assert length(col) == length(val)
   nn = length(col);
@@ -239,6 +388,17 @@ function createIndices(row, col, val)
   return (Row,Col,Val)
 end
 
+function createIndices(row::Int64, col::Array{Int64,1}, val::Array{Complex128,1})
+
+  @assert length(col) == length(val)
+  nn = length(col);
+  mm = 1;
+
+  Row = kron(row, ones(Int64, nn));
+  Col = kron(ones(Int64,mm), col) + Row;
+  Val = kron(ones(Int64,mm), val)
+  return (Row,Col,Val)
+end
 
 function buildConvMatrix(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},D0::Complex128, h::Float64)
     # function to build the convolution matrix

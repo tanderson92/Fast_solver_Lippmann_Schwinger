@@ -8,7 +8,7 @@ using Devectorize
 include("FastConvolution.jl")
 include("quadratures.jl")
 #Defining Omega
-h = 0.005
+h = 0.02
 k = 1/h
 
 # size of box
