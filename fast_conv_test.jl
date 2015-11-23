@@ -1,12 +1,13 @@
 # small scrip to compute the solution of Lipman Schinwer equation
 # We test the types introduced in FastConvolution.jl
+# inthis file the convolution is performed fast.
 
 
 using PyPlot
 using Devectorize
 
 
-
+include("FastConvolution.jl")
 include("quadratures.jl")
 #Defining Omega
 h = 0.01
@@ -83,7 +84,7 @@ Gcompressed = G[indVol,indVolC];
 println(s)
 A = zeros(G);
 AcorrVol = (U[:,end])';
-## Sparsifying preconditioner
+##' Sparsifying preconditioner
 
 indFz1 = round(Integer, n*(n-1)/2 +1 + [0,1,n,n+1,-n, -n+1]);
 indC = setdiff(collect(1:N),indFz1);
@@ -93,7 +94,7 @@ Gcompressed = G[indFz1,indC]
 (U,s,V) = svd(Gcompressed);
 AcorrFz1 = (U[:,end])';
 
-
+#'
 indFz2 = round(Integer, n*(n-1)/2 + [-1,0,n,n-1,-n, -n-1]);
 indC = setdiff(collect(1:N),indFz2);
 Gcompressed = G[indFz2,indC]
@@ -103,7 +104,7 @@ Gcompressed = G[indFz2,indC]
 AcorrFz2 = (U[:,end])';
 
 
-### for boundary in y
+###' for boundary in y
 
 indFx1 = round(Integer, (n+1)/2 + [-1,0,1,n,n+1, n-1]);
 indC = setdiff(collect(1:N),indFx1);
@@ -113,6 +114,7 @@ Gcompressed = G[indFx1,indC]
 (U,s,V) = svd(Gcompressed);
 AcorrFx1 = (U[:,end])';
 
+#'
 indFx2 = round(Integer, N - (n+1)/2 + [-1,0,1,-n,-n+1, -n-1]);
 indC = setdiff(collect(1:N),indFx2);
 Gcompressed = G[indFx2,indC]
@@ -121,6 +123,7 @@ Gcompressed = G[indFx2,indC]
 (U,s,V) = svd(Gcompressed);
 AcorrFx2 = (U[:,end])';
 
+#'
 indcorner1 = round(Integer, 1 + [0,1, n,n+1]);
 indcorner2 = round(Integer, n + [0,-1, n,n-1]);
 indcorner3 = round(Integer, n^2-n+1 + [0,1, -n,-n+1]);
@@ -132,18 +135,21 @@ Gcompressed = G[indcorner1,indC];
 (U,s,V) = svd(Gcompressed);
 Acorrcorner1 = (U[:,end])';
 
+#'
 indC = setdiff(collect(1:N),indcorner2);
 Gcompressed = G[indcorner2,indC];
 # computing the sparsifying correction
 (U,s,V) = svd(Gcompressed);
 Acorrcorner2= (U[:,end])';
 
+#'
 indC = setdiff(collect(1:N),indcorner3);
 Gcompressed = G[indcorner3,indC];
 # computing the sparsifying correction
 (U,s,V) = svd(Gcompressed);
 Acorrcorner3 = (U[:,end])';
 
+#'
 indC = setdiff(collect(1:N),indcorner4);
 Gcompressed = G[indcorner4,indC];
 # computing the sparsifying correction

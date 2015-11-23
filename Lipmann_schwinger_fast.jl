@@ -43,7 +43,7 @@ for ii = 1:N
 end
 toc()
 
-nu(x,y) = 0.3*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.4).*(abs(y).<0.4);
+nu(x,y) = - 0.5*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.4).*(abs(y).<0.4);
 #nu(x,y) = ((abs(x)+abs(y)).<0.2)
 
 xe = collect((x[1]-(n-1)*h):h:(x[end]+(n-1)*h))
@@ -59,7 +59,7 @@ R[round(Integer,ceil(end/2)),round(Integer,ceil(end/2))] =1;
 Ge = 1im/4*hankelh1(0, k*R)*h^2;
 Ge[round(Integer,ceil(end/2)),round(Integer,ceil(end/2))] = 1im/4*D0*h^2;
 
-btest = rand(N);
+btest = rand(N) + im*rand(N);
 
 Btest = reshape(btest, n,n);
 
@@ -100,7 +100,8 @@ Gcompressed = G[indVol,indVolC];
 println(s)
 A = zeros(G);
 AcorrVol = (U[:,end])';
-## Sparsifying preconditioner
+## Sparsifying preconditioner '
+
 
 indFz1 = round(Integer, n*(n-1)/2 +1 + [0,1,n,n+1,-n, -n+1]);
 indC = setdiff(collect(1:N),indFz1);
@@ -130,6 +131,7 @@ Gcompressed = G[indFx1,indC]
 (U,s,V) = svd(Gcompressed);
 AcorrFx1 = (U[:,end])';
 
+#'
 indFx2 = round(Integer, N - (n+1)/2 + [-1,0,1,-n,-n+1, -n-1]);
 indC = setdiff(collect(1:N),indFx2);
 Gcompressed = G[indFx2,indC]
