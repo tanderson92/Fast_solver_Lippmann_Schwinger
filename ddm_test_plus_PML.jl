@@ -85,11 +85,9 @@ u_inc = exp(k*im*Y);
 As = buildSparseA(k,X,Y,D0, n ,m);
 
 # need to check everything here :S
-Mapprox = zeros(Complex128, N,N);
-Mapprox = As*G;
-Mapproxtemp = sparse(Mapprox.*(abs(As).>0));
+Mapproxsp = buildSparseAG(k,X,Y,D0, n ,m);
 
-Mapproxsp = k^2*(Mapproxtemp*spdiagm(nu(X,Y)));
+Mapproxsp = k^2*(Mapproxsp*spdiagm(nu(X,Y)));
 Mapproxsp = As + Mapproxsp;
 
 indBdy1 = find(Y.==0);
@@ -121,101 +119,9 @@ ind2_1 = find(Y2.==h);
 M1inv = lufact(Mapproxsp1);
 M2inv = lufact(Mapproxsp2);
 
-## testing local GReen's function by changing the boundary conditions
-
-dirac = zeros(Complex128, N)
-dirac[n*(n+1)/2 + (n+1)/2] = 1;
-
-diracA = As*dirac;
-
-dirac1 = zeros(Complex128,N1)
-
-dirac1[indVolIntLocal1] = diracA[indVolIntLocal1]
-
-
-
-
 # compute the right hand side
 rhs = -(fastconv*u_inc - u_inc);
 rhsA = (As*rhs);
-# we need to split the rhs in two parts
-rhsA1 = rhsA[indVolInt1]
-rhsA2 = rhsA[indVolInt2]
-# put the rhs in the correct dumme vector
-
-rhsLocal1 = zeros(Complex128,N1)
-rhsLocal2 = zeros(Complex128,N2)
-
-rhsLocal1[indVolIntLocal1] = rhsA1
-rhsLocal2[indVolIntLocal2] = rhsA2
-
-# solve for each one
-
-u1 = M1inv\rhsLocal1;
-u2 = M2inv\rhsLocal2;
-
-#sweep up and down (just communicate trhoug the boundary)
-
-u1_N = u1[ind1_N];
-u1_N1 = u1[ind1_N1];
-
-u2_0 = u2[ind2_0];
-u2_1 = u2[ind2_1];
-
-rhsLocal1[ind1_N]  += -Mapproxsp1[ind1_N,ind1_N1]*u2_1
-rhsLocal1[ind1_N1] += Mapproxsp1[ind1_N1,ind1_N]*u2_0
-
-rhsLocal2[ind2_0] += Mapproxsp2[ind2_0,ind2_1]*u1_N1
-rhsLocal2[ind2_1] += -Mapproxsp2[ind2_1,ind2_0]*u1_N
-
-u11 = M1inv\rhsLocal1;
-u21 = M2inv\rhsLocal2;
-
-uPrecond = vcat(u11[indVolIntLocal1],u21[indVolIntLocal2]);
-
-# testing the recovery of the good solution
-
-
-Minv = lufact(Mapproxsp);
-
-uref = Minv\(As*rhs);
-
-rhsLocal1 = zeros(Complex128,N1)
-rhsLocal2 = zeros(Complex128,N2)
-
-rhsLocal1[indVolIntLocal1] = rhsA1
-rhsLocal2[indVolIntLocal2] = rhsA2
-
-indBdy0 = find(Y.==0)
-indBdy1 = find(Y.==h)
-
-
-rhsLocal1[ind1_N]  += -Mapproxsp1[ind1_N,ind1_N1]*uref[indBdy1]
-rhsLocal1[ind1_N1] += Mapproxsp1[ind1_N1,ind1_N]*uref[indBdy0]
-
-rhsLocal2[ind2_0] += Mapproxsp2[ind2_0,ind2_1]*uref[indBdy1]
-rhsLocal2[ind2_1] += -Mapproxsp2[ind2_1,ind2_0]*uref[indBdy0]
-
-u11 = M1inv\rhsLocal1;
-u21 = M2inv\rhsLocal2;
-
-
-uReconstruct = vcat(u11[indVolIntLocal1],u21[indVolIntLocal2]);
-
-residual = Mapproxsp*uReconstruct - rhsA
-
-println("residual of the reconstructed solution is :", sum(abs(residual)))
-
-# testing the recoveru with the global function
-
-rhstest = zeros(rhsA);
-rhstest[indVolIntLocal1] = rhsA1;
-rhstest[ind1_N]  += -Mapproxsp[ind1_N,ind1_N1]*uref[indBdy1]
-rhstest[ind1_N1] += Mapproxsp[ind1_N1,ind1_N]*uref[indBdy0]
-
-
-uref1 = Minv\(rhstest);
-
 
 function precondIT(source)
 rhsA1 = source[indVolInt1]

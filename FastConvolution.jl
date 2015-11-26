@@ -1,17 +1,6 @@
-# type FastConv
-#     GFFT :: Array{Complex128,2}
-#     nf :: Int64
-#     n  :: Int64
-# end
-
-using Devectorize
-
-
-type FastConv{T}
-    GFFT :: Array{T,2}
-    nf :: Int64
-    n  :: Int64
-end
+# File with the functions necessary to implement the
+# sparsifiying preconditioner
+# Ying 2014 Sparsifying preconditioners for the Lippmann-Schwinger Equation
 
 
 type FastM
@@ -21,18 +10,24 @@ type FastM
     # number of points in the extended domain
     ne :: Int64
     me :: Int64
+    # number of points in the original domain
     n  :: Int64
     m  :: Int64
+    # frequency
     omega :: Float64
 end
 
 import Base.*
 
 function *(M::FastM, b::Array{Complex128,1})
-	  #obtaining the middle index
+    # function to overload the applyication of
+    # M using a Toeplitz reduction via a FFT
+
+    #obtaining the middle index
     indMiddle = round(Integer, M.n-1 + (M.n+1)/2)
-	  # extended b
+	  # Allocate the space for the extended B
     BExt = zeros(Complex128,M.ne, M.ne);
+    # Apply spadiagm(nu) and ented by zeros
    	BExt[1:M.n,1:M.n]= reshape(M.nu.*b,M.n,M.n) ;
 
    	# Fourier Transform
@@ -151,8 +146,19 @@ function entriesSparseA(k,X,Y,D0, n ,m)
   return (Indices, Entries)
 end
 
+function referenceValsTrapRule()
+    # modification to the Trapezoidal rule for logarithmic singularity
+    # as explained in
+    # R. Duan and V. Rokhlin, High-order quadratures for the solution of scattering problems in
+    # two dimensions, J. Comput. Phys.,
+    x = 2.0.^(-(0:5))[:]
+    w = [1-0.892*im, 1-1.35*im, 1-1.79*im, 1- 2.23*im, 1-2.67*im, 1-3.11*im]
+    return (x,w)
+end
 
-function buildSparseA(k,X,Y,D0, n ,m)
+
+function buildSparseA(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
+                       D0::Complex128, n::Int64 ,m::Int64)
 # function that build the sparsigying preconditioner
 
 
@@ -227,7 +233,11 @@ function buildSparseA(k,X,Y,D0, n ,m)
     return A;
 end
 
-function entriesSparseG(k,X,Y,D0, n ,m)
+function entriesSparseG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
+                       D0::Complex128, n::Int64 ,m::Int64)
+  # function to compute the entried of G, inside the volume, at the boundaries
+  # and at the corners. This allows us to compute A*G in O(n) time instead of
+  # O(n^2)
   # we need to have an even number of points
   @assert mod(length(X),2) == 1
   Entries  = Array{Complex128}[]
@@ -291,7 +301,8 @@ function entriesSparseG(k,X,Y,D0, n ,m)
 end
 
 
-function buildSparseAG(k,X,Y,D0, n ,m)
+function buildSparseAG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
+                       D0::Complex128, n::Int64 ,m::Int64)
 # function that build the sparsigying preconditioner
 
 
@@ -374,10 +385,32 @@ function buildSparseAG(k,X,Y,D0, n ,m)
     return AG;
 end
 
- 
+function buildGConv(x,y,h,n,m,D0,k)
+
+    # build extended domain
+    xe = collect((x[1]-(n-1)*h):h:(x[end]+(n-1)*h));
+    ye = collect((y[1]-(m-1)*h):h:(y[end]+(m-1)*h));
+
+    Xe = repmat(xe, 1, 3*m-2);
+    Ye = repmat(ye', 3*n-2,1);
+
+    R = sqrt(Xe.^2 + Ye.^2);
+    # to avoid evaluating at the singularity
+    indMiddle = round(Integer, m-1 + (m+1)/2)
+    # we modify R to remove the zero (so we don't )
+    R[indMiddle,indMiddle] = 1;
+    # sampling the Green's function
+    Ge = 1im/4*hankelh1(0, k*R)*h^2;
+    # modiyfin the diagonal with the quadrature
+    # modification
+    Ge[indMiddle,indMiddle] = 1im/4* D0*h^2;
+
+return Ge
+
+end
 
 function createIndices(row::Array{Int64,1}, col::Array{Int64,1}, val::Array{Complex128,1})
-
+  # function to create the indices for a sparse matrix
   @assert length(col) == length(val)
   nn = length(col);
   mm = length(row);
