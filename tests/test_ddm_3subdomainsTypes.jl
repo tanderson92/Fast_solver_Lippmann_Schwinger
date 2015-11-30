@@ -12,7 +12,7 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 #Defining Omega
-h = 0.01
+h = 0.002
 k = 1/h
 
 # size of box
@@ -120,29 +120,30 @@ function precondIT(source)
 
     u3 = solve(S3,rhsLocal3);
 
-    u3_0 = u3[S3.ind_0];
-    u3_1 = u3[S3.ind_1];
+    ##u3_0 = u3[S3.ind_0];
+    ##u3_1 = u3[S3.ind_1];
 
     # backwards sweep
-    # rhsLocal2[S2.indVolIntLocal] = rhsA2
+    rhsLocal2 = zeros(Complex128,S2.n*S2.m)
+    rhsLocal2[S2.indVolIntLocal] = rhsA2
 
-    # rhsLocal2[S2.ind_n]  += -S2.H[S2.ind_n ,S2.ind_np]*u3_1
-    # rhsLocal2[S2.ind_np] +=  S2.H[S2.ind_np,S2.ind_n ]*u3_0
+    rhsLocal2[S2.ind_n]  += -S2.H[S2.ind_n ,S2.ind_np]*u3_1
+    rhsLocal2[S2.ind_np] +=  S2.H[S2.ind_np,S2.ind_n ]*u3_0
 
-    # u2 = solve(S2,rhsLocal2);
+    u2 = solve(S2,rhsLocal2);
 
-    # u2_0 = u2[S2.ind_0];
-    # u2_1 = u2[S2.ind_1];
+    u2_0 = u2[S2.ind_0];
+    u2_1 = u2[S2.ind_1];
 
-    # rhsLocal2[S2.ind_0] += S2.H[S2.ind_0,S2.ind_1]*u1_N1
-    # rhsLocal2[S2.ind_1] += -S2.H[S2.ind_1,S2.ind_0]*u1_N
+    rhsLocal2[S2.ind_0] += S2.H[S2.ind_0,S2.ind_1]*u1_N1
+    rhsLocal2[S2.ind_1] += -S2.H[S2.ind_1,S2.ind_0]*u1_N
 
-    # #u2 = solve(S2,rhsLocal2);
+    u2 = solve(S2,rhsLocal2);
 
-    # rhsLocal1[S1.ind_n]  += -S1.H[S1.ind_n,S1.ind_np]*u2_1
-    # rhsLocal1[S1.ind_np] +=  S1.H[S1.ind_np,S1.ind_n]*u2_0
+    rhsLocal1[S1.ind_n]  += -S1.H[S1.ind_n,S1.ind_np]*u2_1
+    rhsLocal1[S1.ind_np] +=  S1.H[S1.ind_np,S1.ind_n]*u2_0
 
-    # u1 = solve(S1,rhsLocal1);
+    u1 = solve(S1,rhsLocal1);
 
 
     return  vcat(u1[S1.indVolIntLocal],u2[S2.indVolIntLocal],u3[S3.indVolIntLocal]);
