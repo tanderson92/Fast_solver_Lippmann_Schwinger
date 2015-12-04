@@ -12,7 +12,7 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 #Defining Omega
-h = 0.002
+h = 0.01
 k = 1/h
 
 # size of box
@@ -59,9 +59,9 @@ Mapproxsp = k^2*(AG*spdiagm(nu(X,Y)));
 Mapproxsp = As + Mapproxsp;
 
 
-S1 = Subdomain(As,AG,Mapproxsp,x,y, 1, round(Integer, m/3), 30, h, nu, k);
-S2 = Subdomain(As,AG,Mapproxsp,x,y,  round(Integer, m/3)+1, round(Integer, 2*m/3), 30, h, nu, k);
-S3 = Subdomain(As,AG,Mapproxsp,x,y,  round(Integer, 2*m/3)+1, m, 30, h, nu, k);
+S1 = Subdomain(As,AG,Mapproxsp,x,y, 1, round(Integer, m/3)-1, 20, h, nu, k);
+S2 = Subdomain(As,AG,Mapproxsp,x,y,  round(Integer, m/3), round(Integer, 2*m/3), 20, h, nu, k);
+S3 = Subdomain(As,AG,Mapproxsp,x,y,  round(Integer, 2*m/3)+1, m, 20, h, nu, k);
 
 # compute the right hand side
 rhs = -(fastconv*u_inc - u_inc);
@@ -155,7 +155,7 @@ ApplyPrecond(x) = precondIT(Mapproxsp*x)
 using IterativeSolvers
 
 u = zeros(Complex128,N);
-@time info =  gmres!(u, ApplyPrecond, precondIT(As*rhs), restart = 40)
+@time info =  gmres!(u, ApplyPrecond, precondIT(As*rhs), restart = 10)
 println("number of iterations for inner solver is ", countnz(info[2].residuals[:]))
 
 # solving the new
@@ -165,7 +165,7 @@ Minv = lufact(Mapproxsp);
 
 function MinvAp(x)
     y = zeros(Complex128,N);
-    info =  gmres!(y, ApplyPrecond, precondIT(x), tol = 1e-8, restart = 40)
+    info =  gmres!(y, ApplyPrecond, precondIT(x), tol = 1e-8, restart = 15)
     println("number of iterations for inner solver is ", countnz(info[2].residuals[:]))
     return y
 end
