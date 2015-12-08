@@ -43,7 +43,7 @@ function *(M::FastM, b::Array{Complex128,1})
     return (b + B[:])
 end
 
-function sampleG(k,X,Y,indS, D0)
+function sampleG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},indS::Array{Int64,1}, D0::Complex128)
     # function to sample the Green's function at frequency k
     Gc = zeros(Complex128, length(indS), length(X))
     for i = 1:length(indS)

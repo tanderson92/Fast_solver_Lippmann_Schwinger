@@ -12,7 +12,7 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 #Defining Omega
-h = 0.001
+h = 0.002
 k = 1/h
 
 # size of box
@@ -25,7 +25,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 20;
+nSubdomains = 3;
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
 
@@ -40,7 +40,7 @@ D0 = D[1];
 
 #the domain is decomposed in two subdomains
 
-nu(x,y) = -0.3*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
+nu(x,y) = -0.3*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.46).*(abs(y).<0.46);
 
 Ge = buildGConv(x,y,h,n,m,D0,k);
 GFFT = fft(Ge);
@@ -68,7 +68,7 @@ idx1 = SubDomLimits[1:end-1]
 idxn = SubDomLimits[2:end]-1
 
 
-SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 50, h, nu, k) for ii = 1:nSubdomains];
+SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 30, h, nu, k) for ii = 1:nSubdomains];
 
 # compute the right hand side
 rhs = -(fastconv*u_inc - u_inc);
@@ -187,7 +187,7 @@ ApplyPrecond(x) = precondIT(SubArray, Mapproxsp*x)
 using IterativeSolvers
 
 u = zeros(Complex128,N);
-@time info =  gmres!(u, ApplyPrecond, precondIT(SubArray, As*rhs), restart = 20)
+@time info =  gmres!(u, ApplyPrecond, precondIT(SubArray, As*rhs), restart = 40)
 println("number of iterations for inner solver is ", countnz(info[2].residuals[:]))
 
 # solving the new
