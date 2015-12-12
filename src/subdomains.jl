@@ -17,7 +17,8 @@ type Subdomain
     indVolInt
     indVol
     indVolIntLocal
-    function Subdomain(As,AG,Msp, x,y, ind1, indn, ndelta, h, nu,k)
+    solvertype
+    function Subdomain(As,AG,Msp, x,y, ind1, indn, ndelta, h, nu,k ; solvertype = "UMFPACK")
         println("Building a subdomain")
         indStart   = ind1==1? 1 : ind1-ndelta;
         indFinish = indn==length(y) ? length(y) : indn+ndelta;
@@ -86,20 +87,46 @@ type Subdomain
         end
 
         println("Factorizing the local matrix")
-        Minv = lufact(Mapproxsp);
+        if solvertype == "UMFPACK"
+            Minv = lufact(Mapproxsp);
+        end
+
+        if solvertype == "MKLPARDISO"
+            Minv = MKLPardisoSolver();
+            set_nprocs(Minv, 16)
+            #setting the type of the matrix
+            set_mtype(Minv,3)
+            # setting we are using a transpose
+            set_iparm(Minv,12,2)
+            # setting the factoriation phase
+            set_phase(Minv, 12)
+            X = zeros(Complex128, n1*m1,1)
+            # factorizing the matrix
+            pardiso(Minv,X, Mapproxsp,X)
+            set_phase(Minv, 33)
+            set_iparm(Minv,12,2)
+        end
 
         new(n1,m1, h, ndelta*h,ind_0, ind_1, ind_n, ind_np, Minv,Mapproxsp ,
             x, y1, [y[ind1] y[indn]], indVolInt, indVol,
-            indVolIntLocal)
+            indVolIntLocal, solvertype)
     end
 end
 
-function solve(subdomain::Subdomain, f)
+function solve(subdomain::Subdomain, f::Array{Complex128,1})
     # u = solve(subdomain::Subdomain, f)
     # function that solves the system Hu=f in the subdomain
     # check size
     if (size(f[:])[1] == subdomain.n*subdomain.m)
-        u = subdomain.Hinv\f[:];
+        if subdomain.solvertype == "UMFPACK"
+            u = subdomain.Hinv\f[:];
+        end
+        if subdomain.solvertype == "MKLPARDISO"
+            set_phase(subdomain.Minv, 33)
+            u = zeros(Complex128,length(f))
+            pardiso(subdomain.Hinv, u, subdomain.H, f)
+        end
+
         return u
     else
         print("The dimensions do not match \n");

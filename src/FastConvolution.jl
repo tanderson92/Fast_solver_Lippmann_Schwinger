@@ -43,6 +43,7 @@ function *(M::FastM, b::Array{Complex128,1})
     return (b + B[:])
 end
 
+# # # sequential function
 function sampleG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},indS::Array{Int64,1}, D0::Complex128)
     # function to sample the Green's function at frequency k
     Gc = zeros(Complex128, length(indS), length(X))
@@ -55,6 +56,24 @@ function sampleG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},indS::Array{
     end
     return Gc
 end
+
+# TO BE explored further :S..
+# parallel function (around 4 times faster :) )
+# function sampleG(k,X::Array{Float64,1},Y::Array{Float64,1},indS::Array{Int64,1}, D0::Complex128)
+#     # function to sample the Green's function at frequency k
+
+#     Gc = SharedArray(Complex128, (length(indS), length(X)),init = S -> S[Base.localindexes(S)] = myid())
+#     r  = SharedArray(Float64, (length(indS), length(X)),init = S -> S[Base.localindexes(S)] = myid())
+#     @parallel for i = 1:length(indS)
+#         ii = indS[i]
+#         r[i,:] = sqrt( (X-X[ii]).^2 + (Y-Y[ii]).^2);
+#         r[i,ii] = 1;
+#         Gc[i,:] =  1im/4*hankelh1(0, k*r[i,:])*h^2;
+#         Gc[i,ii]= 1im/4*D0*h^2;
+#     end
+
+#     return sdata(Gc)
+# end
 
 function entriesSparseA(k,X,Y,D0, n ,m)
   # we need to have an even number of points

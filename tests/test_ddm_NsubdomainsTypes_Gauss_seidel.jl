@@ -6,14 +6,17 @@
 
 using PyPlot
 using Devectorize
-
+using IterativeSolvers
 
 include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 #Defining Omega
-h = 0.005
+h = 0.001
 k = 1/h
+
+println("Frequency is ", k/(2*pi))
+println("Number of discretization points is ", 1/h)
 
 # size of box
 a  = 1
@@ -26,6 +29,7 @@ X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
 nSubdomains = 10;
+println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
 
@@ -51,9 +55,11 @@ u_inc = exp(k*im*Y);
 
 # bdyInd = setdiff(collect(1:N), volInd);
 
-As = buildSparseA(k,X,Y,D0, n ,m);
+println("Building the A sparse")
+@time As = buildSparseA(k,X,Y,D0, n ,m);
 
-AG = buildSparseAG(k,X,Y,D0, n ,m);
+println("Building A*G in sparse format")
+@time AG = buildSparseAG(k,X,Y,D0, n ,m);
 
 # need to check everything here :S
 
@@ -67,16 +73,18 @@ idx1 = SubDomLimits[1:end-1]
 # index in y of the last row of each subdomains
 idxn = SubDomLimits[2:end]-1
 
-
+tic();
+#SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
 SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k) for ii = 1:nSubdomains];
+println("Time for the factorization ", toc())
 
 # compute the right hand side
 rhs = -(fastconv*u_inc - u_inc);
 rhsA = (As*rhs);
 
 
-# defining the Preconditioner
-function precondIT(subDomains, source)
+# defining the Preconditioner (Gauss Seidel) (find the best way to anotate the array)
+function precondGS(subDomains, source::Array{Complex128,1})
     ## We are only implementing the Jacobi version of the preconditioner
     nSubs = length(subDomains);
 
@@ -103,116 +111,7 @@ function precondIT(subDomains, source)
     u_n[index]  = uLocalArray[1][subDomains[1].ind_n]
     u_np[index] = uLocalArray[1][subDomains[1].ind_np]
 
-    for ii = 2:nSubs-1
-        # this will be slow most likely but it is readable
-        # we will need to modify this part
-        ind_0  = subDomains[ii].ind_0
-        ind_1  = subDomains[ii].ind_1
-        ind_n  = subDomains[ii].ind_n
-        ind_np = subDomains[ii].ind_np
-
-        # making a copy of the partitioned source
-        rhsLocaltemp = copy(rhsLocal[ii]);
-
-        rhsLocaltemp[subDomains[ii].ind_0] +=  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
-        rhsLocaltemp[subDomains[ii].ind_1] += -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
-
-        uDown = solve(subDomains[ii],rhsLocaltemp)
-
-        u_n[(ii-1)*n  + index] = uDown[ind_n]
-        u_np[(ii-1)*n + index] = uDown[ind_np]
-
-    end
-
-    # Upward sweep
-
-    u_0[(nSubs-1)*n + index] = uLocalArray[end][subDomains[end].ind_0]
-    u_1[(nSubs-1)*n + index] = uLocalArray[end][subDomains[end].ind_1]
-
-
-     for ii = nSubs-1:-1:2
-        # this will be slow most likely but it is readable
-        # we will need to modify this part
-        ind_0  = subDomains[ii].ind_0
-        ind_1  = subDomains[ii].ind_1
-        ind_n  = subDomains[ii].ind_n
-        ind_np = subDomains[ii].ind_np
-
-        # making a copy of the parititioned source
-        rhsLocaltemp = copy(rhsLocal[ii]);
-
-        rhsLocaltemp[subDomains[ii].ind_n]  += -subDomains[ii].H[ind_n,ind_np]*u_1[(ii)*n + index]
-        rhsLocaltemp[subDomains[ii].ind_np] +=  subDomains[ii].H[ind_np,ind_n]*u_0[(ii)*n + index]
-
-        uUp = solve(subDomains[ii],rhsLocaltemp)
-
-        u_0[(ii-1)*n + index] = uUp[ind_0]
-        u_1[(ii-1)*n + index] = uUp[ind_1]
-
-    end
-
-    # reconstruction
-
-    uPrecond = Complex128[]
-
-    for ii = 1:nSubs
-
-        ind_0  = subDomains[ii].ind_0
-        ind_1  = subDomains[ii].ind_1
-        ind_n  = subDomains[ii].ind_n
-        ind_np = subDomains[ii].ind_np
-
-        # making a copy of the parititioned source
-        rhsLocaltemp = copy(rhsLocal[ii]);
-
-        # adding the source at the boundaries
-        if ii!= 1
-            # we need to be carefull at the edges
-            rhsLocaltemp[subDomains[ii].ind_0]  +=  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
-            rhsLocaltemp[subDomains[ii].ind_1]  += -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
-        end
-        if ii!= nSubs
-            rhsLocaltemp[subDomains[ii].ind_n]  += -subDomains[ii].H[ind_n,ind_np]*u_1[(ii)*n + index]
-            rhsLocaltemp[subDomains[ii].ind_np] +=  subDomains[ii].H[ind_np,ind_n]*u_0[(ii)*n + index]
-        end
-
-        uLocal = solve(subDomains[ii],rhsLocaltemp)
-
-        uPrecond = vcat(uPrecond,uLocal[subDomains[ii].indVolIntLocal])
-    end
-    return  uPrecond
-end
-
-
-# defining the Preconditioner
-function precondGS(subDomains, source)
-    ## We are only implementing the Jacobi version of the preconditioner
-    nSubs = length(subDomains);
-
-    n = subDomains[1].n
-    # building the local rhs
-    rhsLocal = [ zeros(Complex128,subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
-
-    # copying the wave-fields
-    for ii = 1:nSubs
-        rhsLocal[ii][subDomains[ii].indVolIntLocal] = source[subDomains[ii].indVolInt]
-    end
-
-    uLocalArray = [solve(subDomains[ii],rhsLocal[ii] )  for  ii = 1:nSubs]
-
-    u_0  = zeros(Complex128,n*nSubs)
-    u_1  = zeros(Complex128,n*nSubs)
-    u_n  = zeros(Complex128,n*nSubs)
-    u_np = zeros(Complex128,n*nSubs)
-
-    index = 1:n
-
-    # Downward sweep
-
-    u_n[index]  = uLocalArray[1][subDomains[1].ind_n]
-    u_np[index] = uLocalArray[1][subDomains[1].ind_np]
-
-    # populate the traces 
+    # populate the traces
 
     for ii = 1:nSubs
         # this will be slow most likely but it is readable
@@ -258,7 +157,7 @@ function precondGS(subDomains, source)
 
     end
 
-    #Applying L 
+    #Applying L
 
 
     for ii = 2:nSubs
@@ -274,20 +173,21 @@ function precondGS(subDomains, source)
 
         if ii != nSubs
 
-        rhsLocaltemp[subDomains[ii].ind_1]  =  subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
-        rhsLocaltemp[subDomains[ii].ind_0]  = -subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
+        rhsLocaltemp[subDomains[ii].ind_0]  =  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
+        rhsLocaltemp[subDomains[ii].ind_1]  = -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
 
-        #rhsLocaltemp[subDomains[ii].ind_np] = -subDomains[ii].H[ind_np,ind_n]*u_n[(ii-1)*n + index]
-        #rhsLocaltemp[subDomains[ii].ind_n]  =  subDomains[ii].H[ind_n,ind_np]*u_np[(ii-1)*n + index]
+
+        rhsLocaltemp[subDomains[ii].ind_n]  = -subDomains[ii].H[ind_n,ind_np]*u_np[(ii-1)*n + index]
+        rhsLocaltemp[subDomains[ii].ind_np] =  subDomains[ii].H[ind_np,ind_n]*u_n[(ii-1)*n + index]
 
         else
-            rhsLocaltemp[subDomains[ii].ind_0]  = -subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
-            rhsLocaltemp[subDomains[ii].ind_1]  =  subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
+            rhsLocaltemp[subDomains[ii].ind_0]  =  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
+            rhsLocaltemp[subDomains[ii].ind_1]  = -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
         end
 
         uL = solve(subDomains[ii],rhsLocaltemp)
 
-        # saving the reflections 
+        # saving the reflections
         u_0[(ii-1)*n + index] -= uL[ind_0]
         u_1[(ii-1)*n + index] -= uL[ind_1] - u_np[(ii-2)*n + index]
 
@@ -311,7 +211,7 @@ function precondGS(subDomains, source)
 
         rhsLocaltemp[subDomains[ii].ind_np] =  subDomains[ii].H[ind_np,ind_n]*u_0[(ii)*n + index]
         rhsLocaltemp[subDomains[ii].ind_n]  = -subDomains[ii].H[ind_n,ind_np]*u_1[(ii)*n + index]
-        
+
         uUp = solve(subDomains[ii],rhsLocaltemp)
 
         u_0[(ii-1)*n + index] = -u_0[(ii-1)*n + index] + uUp[ind_0]
@@ -338,7 +238,7 @@ function precondGS(subDomains, source)
             # we need to be carefull at the edges
             rhsLocaltemp[subDomains[ii].ind_1]  += -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
             rhsLocaltemp[subDomains[ii].ind_0]  +=  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
-            
+
         end
         if ii!= nSubs
             rhsLocaltemp[subDomains[ii].ind_np] +=  subDomains[ii].H[ind_np,ind_n]*u_0[(ii)*n + index]
@@ -353,19 +253,11 @@ function precondGS(subDomains, source)
 end
 
 
-
-ApplyPrecond(x) = precondIT(SubArray, Mapproxsp*x)
-
-u = zeros(Complex128,N);
-@time info =  gmres!(u, ApplyPrecond, precondIT(SubArray, As*rhs), restart = 20)
-println("number of iterations for inner solver is ", countnz(info[2].residuals[:]))
-
-
 ApplyPrecondGS(x) = precondGS(SubArray, Mapproxsp*x)
 
 u = zeros(Complex128,N);
 @time info =  gmres!(u, ApplyPrecondGS, precondGS(SubArray, As*rhs), restart = 20)
-println("number of iterations for inner solver is ", countnz(info[2].residuals[:]))
+println("number of iterations for inner solver using a Gauss-Seidel preconditioner is ", countnz(info[2].residuals[:]))
 
 # solving the new
 
@@ -373,8 +265,8 @@ Minv = lufact(Mapproxsp);
 
 function MinvAp(x)
     y = zeros(Complex128,N);
-    info =  gmres!(y, ApplyPrecond, precondIT(SubArray,x), tol = 1e-4, restart = 40)
-    println("number of iterations for inner solver is ", countnz(info[2].residuals[:]))
+    info =  gmres!(y, ApplyPrecondGS, precondGS(SubArray,x), tol = 1e-4, restart = 40)
+    println("number of iterations for inner solver a Gauss-Seidel preconditioner is ", countnz(info[2].residuals[:]))
     return y
 end
 
@@ -392,8 +284,8 @@ rhs = -(fastconv*u_inc - u_inc);
 #info =  gmres!(x, M, rhs, maxiter  = 60)
 
 
-u = zeros(Complex128,N);
-@time info =  gmres!(u, precond, Minv\(As*rhs))
-println(info[2].residuals[:])
+# u = zeros(Complex128,N);
+# @time info =  gmres!(u, precond, Minv\(As*rhs))
+# println(info[2].residuals[:])
 
 
