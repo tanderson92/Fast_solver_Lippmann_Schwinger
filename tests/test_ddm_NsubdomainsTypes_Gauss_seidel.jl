@@ -44,7 +44,7 @@ D0 = D[1];
 
 #the domain is decomposed in two subdomains
 
-nu(x,y) = -0.3*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
+nu(x,y) = -1*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
 
 Ge = buildGConv(x,y,h,n,m,D0,k);
 GFFT = fft(Ge);
