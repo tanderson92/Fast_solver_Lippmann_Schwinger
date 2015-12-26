@@ -7,10 +7,10 @@ using PyPlot
 using Devectorize
 using IterativeSolvers
 
-include("FastConvolution.jl")
-include("quadratures.jl")
+include("../src/FastConvolution.jl")
+include("../src/quadratures.jl")
 #Defining Omega
-h = 0.005
+h = 0.001
 k = 1/h
 
 # size of box
@@ -28,7 +28,7 @@ Y = repmat(y', n,1)[:]
 D0 = D[1];
 
 # Defining the smooth perturbation of the slowness
-nu(x,y) = -0.3*exp(-40*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
+nu(x,y) = -0.4*exp(-40*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
 
 # Sampling the Green's function for the Toeplitz form
 Ge = buildGConv(x,y,h,n,m,D0,k);
@@ -46,7 +46,10 @@ Mapproxsp = As + k^2*(buildSparseAG(k,X,Y,D0, n ,m)*spdiagm(nu(X,Y)));
 Minv = lufact(Mapproxsp);
 
 # defining the preconditioned system
-precond(x) = (Minv\(As*(fastconv*x)));
+function precond(x)
+    println("applicating the preconditioner")
+    return (Minv\(As*(fastconv*x)));
+end
 
 # building the RHS from the incident field
 u_inc = exp(k*im*X);

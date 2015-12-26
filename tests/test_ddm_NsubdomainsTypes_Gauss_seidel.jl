@@ -12,7 +12,7 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 #Defining Omega
-h = 0.001
+h = 0.002
 k = 1/h
 
 println("Frequency is ", k/(2*pi))
@@ -73,9 +73,12 @@ idx1 = SubDomLimits[1:end-1]
 # index in y of the last row of each subdomains
 idxn = SubDomLimits[2:end]-1
 
+npml = round(Integer, (m-1)/nSubdomains)
+
+
 tic();
 #SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
-SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k) for ii = 1:nSubdomains];
+SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], npml, h, nu, k) for ii = 1:nSubdomains];
 println("Time for the factorization ", toc())
 
 # compute the right hand side
@@ -83,6 +86,8 @@ rhs = -(fastconv*u_inc - u_inc);
 rhsA = (As*rhs);
 
 
+# TO DO: Optimize the preconditioner to use only two (the optimal) solves per
+# iteration
 # defining the Preconditioner (Gauss Seidel) (find the best way to anotate the array)
 function precondGS(subDomains, source::Array{Complex128,1})
     ## We are only implementing the Jacobi version of the preconditioner

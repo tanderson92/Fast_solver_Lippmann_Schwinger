@@ -58,7 +58,7 @@ function sampleG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},indS::Array{
 end
 
 # TO BE explored further :S..
-# parallel function (around 4 times faster :) )
+# parallel function (around 4 times faster :) ) however it doens't provide the correct answer :/
 # function sampleG(k,X::Array{Float64,1},Y::Array{Float64,1},indS::Array{Int64,1}, D0::Complex128)
 #     # function to sample the Green's function at frequency k
 
