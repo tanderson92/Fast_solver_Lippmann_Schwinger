@@ -46,9 +46,15 @@ D0 = D[1];
 
 #the domain is decomposed in two subdomains
 
-nu(x,y) = ( 0.3*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-100*((x -0.1).^2 + (y+0.1).^2)) +
-            0.2*exp(-200*((x+0.1).^2 + y.^2))  + 0.25*exp(-1000*((x -0.1).^2 + (y+0.1).^2)) +
-            0.25*exp(-200*((x+0.2).^2 + (y+0.2).^2))  + 0.3*exp(-1000*((x-0.1).^2 + (y+0.2).^2)) ).*(abs(x).<0.48).*(abs(y).<0.48);
+nu(x,y) = ( 0.2*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-200*((x - 0.1).^2 + (y+0.1).^2)) +
+            0.2*exp(-2000*((x+0.1).^2 + y.^2))  + 0.25*exp(-1000*((x -0.1).^2 + (y+0.1).^2)) +
+            0.1*exp(-200*((x+0.3).^2 + (y+0.3).^2))  + 0.1*exp(-1000*((x-0.1).^2 + (y+0.2).^2)) +
+            0.1*exp(-200*((x-0.12).^2 + (y-0.32).^2))  + 0.1*exp(-1000*((x+0.14).^2 + (y+0.24).^2)) +
+            0.1*exp(-200*((x+0.12).^2 + (y+0.32).^2))  + 0.1*exp(-1000*((x-0.14).^2 + (y-0.24).^2)) +
+            0.1*exp(-200*((x-0.12).^2 + (y+0.22).^2))  + 0.1*exp(-1000*((x+0.34).^2 + (y+0.4).^2)) +
+            0.2*exp(-1000*((x-0.42).^2 + 2*(y+0.42).^2)) + 0.1*exp(-1000*((x+0.14).^2 + (y+0.04).^2)) +
+            0.3*exp(-2000*((x-0.25).^2 + 3*(y).^2))  + 0.2*exp(-1000*((x-0.34).^2 + (y-0.4).^2)) +
+            0.25*exp(-200*((x+0.2).^2 + (y+0.2).^2))  + 0.2*exp(-1000*(2*(x-0.1).^2 + (y+0.2).^2)) ).*(abs(x).<0.48).*(abs(y).<0.48);
 
 Ge = buildGConv(x,y,h,n,m,D0,k);
 GFFT = fft(Ge);
@@ -88,15 +94,15 @@ println("Time for the factorization ", toc())
 
 # compute the right hand side
 rhs = -(fastconv*u_inc - u_inc);
-rhsA = (As*rhs);
 
 
-GSPrecond = GSPreconditioner(SubArray)
+# Testing the Polarized traces preconditioner
+# GSPrecond = GSPreconditioner(SubArray)
 
-# testing the preconditioner for the sparsified system
-u = zeros(Complex128,N);
-@time info =  gmres!(u, Mapproxsp, As*rhs,GSPrecond , restart = 20)
-println("number of iterations for inner solver using a Gauss-Seidel preconditioner is ", countnz(info[2].residuals[:]))
+# # testing the preconditioner for the sparsified system
+# u = zeros(Complex128,N);
+# @time info =  gmres!(u, Mapproxsp, As*rhs,GSPrecond , restart = 20)
+# println("number of iterations for inner solver using a Gauss-Seidel preconditioner is ", countnz(info[2].residuals[:]))
 
 # instanciating the new preconditioner
 Precond = Preconditioner(As,Mapproxsp,SubArray)
@@ -111,7 +117,7 @@ rhs = -(fastconv*u_inc - u_inc);
  u = zeros(Complex128,N);
  @time info =  gmres!(u, fastconv, rhs, Precond)
 println(info[2].residuals[:])
-countnz(info[2].residuals[:])
+println("Number of iterations to convergence is ", countnz(info[2].residuals[:]))
 
 
 imshow(real(reshape(u+u_inc,n,m)))
