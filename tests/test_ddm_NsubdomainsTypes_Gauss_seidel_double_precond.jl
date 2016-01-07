@@ -13,8 +13,9 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
+
 #Defining Omega
-h = 0.0025
+h = 0.0005
 k = 1/h
 
 println("Frequency is ", k/(2*pi))
@@ -30,7 +31,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 12;
+nSubdomains = 80;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -41,10 +42,7 @@ println("Number of Subdomains is ", nSubdomains)
 (ppw,D) = referenceValsTrapRule();
 D0 = D[1];
 
-#G = buildConvMatrix(k,X,Y,D0,h)
-
-
-#the domain is decomposed in two subdomains
+# the perturbation
 
 nu(x,y) = ( 0.2*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-200*((x - 0.1).^2 + (y+0.1).^2)) +
             0.2*exp(-2000*((x+0.1).^2 + y.^2))  + 0.25*exp(-1000*((x -0.1).^2 + (y+0.1).^2)) +
@@ -64,7 +62,6 @@ fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
 u_inc = exp(k*im*Y);
 
 imshow(real(reshape( 1- nu(X,Y),n,m)))
-# bdyInd = setdiff(collect(1:N), volInd);
 
 println("Building the A sparse")
 @time As = buildSparseA(k,X,Y,D0, n ,m);
@@ -84,8 +81,8 @@ idx1 = SubDomLimits[1:end-1]
 # index in y of the last row of each subdomains
 idxn = SubDomLimits[2:end]-1
 
-npml = round(Integer, (m-1)/nSubdomains)
-
+#npml = round(Integer, ((m-1)/nSubdomains)/2)
+npml = 10
 
 tic();
 #SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
@@ -110,12 +107,9 @@ Precond = Preconditioner(As,Mapproxsp,SubArray)
 # building the RHS from the incident field
 u_inc = exp(k*im*Y);
 rhs = -(fastconv*u_inc - u_inc);
-#x = zeros(Complex128,N);
-#info =  gmres!(x, M, rhs, maxiter  = 60)
 
-
- u = zeros(Complex128,N);
- @time info =  gmres!(u, fastconv, rhs, Precond)
+u = zeros(Complex128,N);
+@time info =  gmres!(u, fastconv, rhs, Precond)
 println(info[2].residuals[:])
 println("Number of iterations to convergence is ", countnz(info[2].residuals[:]))
 
