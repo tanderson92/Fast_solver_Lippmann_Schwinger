@@ -20,8 +20,8 @@ type Subdomain
     solvertype
     function Subdomain(As,AG,Msp, x,y, ind1, indn, ndelta, h, nu,k ; solvertype = "UMFPACK")
         println("Building a subdomain")
-        indStart   = ind1==1? 1 : ind1-ndelta;
-        indFinish = indn==length(y) ? length(y) : indn+ndelta;
+        indStart  = (ind1-ndelta) < 1         ? 1 : ind1-ndelta;
+        indFinish = (indn+ndelta) > length(y) ? length(y) : indn+ndelta;
         y1 = y[indStart : indFinish]
         x1 = copy(x)
         n1 = length(x1)
@@ -86,6 +86,7 @@ type Subdomain
             ind_np  = [];
         end
 
+        # TODO : factorization has to be performed separately
         println("Factorizing the local matrix")
         if solvertype == "UMFPACK"
             Minv = lufact(Mapproxsp);
@@ -122,7 +123,7 @@ function solve(subdomain::Subdomain, f::Array{Complex128,1})
             u = subdomain.Hinv\f[:];
         end
         if subdomain.solvertype == "MKLPARDISO"
-            set_phase(subdomain.Minv, 33)
+            set_phase(subdomain.Hinv, 33)
             u = zeros(Complex128,length(f))
             pardiso(subdomain.Hinv, u, subdomain.H, f)
         end
