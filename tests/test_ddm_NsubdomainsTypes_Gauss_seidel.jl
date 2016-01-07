@@ -12,7 +12,7 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 #Defining Omega
-h = 0.002
+h = 0.01
 k = 1/h
 
 println("Frequency is ", k/(2*pi))
@@ -28,7 +28,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 10;
+nSubdomains = 4;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -44,7 +44,9 @@ D0 = D[1];
 
 #the domain is decomposed in two subdomains
 
-nu(x,y) = -1*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
+nu(x,y) = ( 0.3*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-100*((x -0.1).^2 + (y+0.1).^2)) +
+            0.2*exp(-200*((x+0.1).^2 + y.^2))  + 0.25*exp(-1000*((x -0.1).^2 + (y+0.1).^2)) +
+            0.25*exp(-200*((x+0.2).^2 + (y+0.2).^2))  + 0.3*exp(-1000*((x-0.1).^2 + (y+0.2).^2)) ).*(abs(x).<0.48).*(abs(y).<0.48);
 
 Ge = buildGConv(x,y,h,n,m,D0,k);
 GFFT = fft(Ge);
@@ -53,6 +55,7 @@ fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
 
 u_inc = exp(k*im*Y);
 
+imshow(real(reshape( 1- nu(X,Y),n,m)))
 # bdyInd = setdiff(collect(1:N), volInd);
 
 println("Building the A sparse")
@@ -163,7 +166,6 @@ function precondGS(subDomains, source::Array{Complex128,1})
     end
 
     #Applying L
-
 
     for ii = 2:nSubs
         # this will be slow most likely but it is readable
