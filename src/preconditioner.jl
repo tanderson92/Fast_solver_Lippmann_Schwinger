@@ -7,7 +7,7 @@ type GSPreconditioner
     subDomains
     tol::Float64
     precondtype # preconditioner type Jacobi, GaussSeidel Opt
-    function GSPreconditioner(subDomains; tol = 1e-2, precondtype ="GS")
+    function GSPreconditioner(subDomains; tol = 1e-4, precondtype ="GS")
         n = subDomains[1].n
         nSubs = length(subDomains)
         new(n,nSubs, subDomains, tol,precondtype) # don't know if it's the best answer
@@ -18,10 +18,9 @@ type Preconditioner
     As::SparseMatrixCSC{Complex{Float64},Int64}
     Msp::SparseMatrixCSC{Complex{Float64},Int64}
     GSPreconditioner
-
-    function Preconditioner(As,Msp,subDomains)
-
-        new(As,Msp, GSPreconditioner(subDomains)) # don't know if it's the best answer
+    mkl_sparseBlas
+    function Preconditioner(As,Msp,subDomains; mkl_sparseBlas=false)
+        new(As,Msp, GSPreconditioner(subDomains), mkl_sparseBlas) # don't know if it's the best answer
     end
 
 end
@@ -30,16 +29,26 @@ end
 import Base.\
 
 function \(M::GSPreconditioner, b::Array{Complex128,1})
-    println("Applying the polarized Traces Preconditioner")
+    #println("Applying the polarized Traces Preconditioner")
+    
     # TODO add more options to the type of preconditioner used
     #return precondGS(M.subDomains, b)
     return precondGSOptimized(M.subDomains, b)
 end
 
 function \(M::Preconditioner, b::Array{Complex128,1})
-    println("Applying the sparsifying Preconditioner")
+    #println("Applying the sparsifying Preconditioner")
+    
     y = zeros(b)
-    gmres!(y, M.Msp, M.As*b, M.GSPreconditioner, tol = 1e-4)
+    if M.mkl_sparseBlas
+        x0 = zeros(b);
+        beta = Complex128(1+0im)
+        SparseBLAS.cscmv!('N',beta,"GXXF",M.As,b,beta,x0)
+        #println("using sparse blas!")
+    else
+        x0 =  M.As*b; 
+    end
+    gmres!(y, M.Msp, x0 , M.GSPreconditioner, tol = 1e-4)
     #y = M.GSPreconditioner\(M.As*b)
     return y
 end
@@ -500,7 +509,7 @@ function precondGSOptimized(subDomains, source::Array{Complex128,1})
     # allocating space for the solution
     uPrecond = zeros(Complex128, length(source))
 
-     for ii = nSubs:-1:1
+    for ii = nSubs:-1:1
 
         # adding the source at the boundaries
         if ii!= nSubs
