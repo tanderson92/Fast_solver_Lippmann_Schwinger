@@ -10,7 +10,8 @@ type Subdomain
     ind_n::Array{Int64,1}
     ind_np::Array{Int64,1}
     Hinv
-    H::SparseMatrixCSC{Complex128,Int64}
+    H #::SparseMatrixCSC{Complex128,Int64}
+    # removed in order to have a faster PARDISO call 
     x
     y
     ylim
@@ -86,31 +87,41 @@ type Subdomain
             ind_np  = [];
         end
 
-        # TODO : factorization has to be performed separately
-        println("Factorizing the local matrix")
-        if solvertype == "UMFPACK"
-            Minv = lufact(Mapproxsp);
-        end
-
-        if solvertype == "MKLPARDISO"
-            Minv = MKLPardisoSolver();
-            set_nprocs(Minv, 16)
-            #setting the type of the matrix
-            set_mtype(Minv,3)
-            # setting we are using a transpose
-            set_iparm(Minv,12,2)
-            # setting the factoriation phase
-            set_phase(Minv, 12)
-            X = zeros(Complex128, n1*m1,1)
-            # factorizing the matrix
-            pardiso(Minv,X, Mapproxsp,X)
-            set_phase(Minv, 33)
-            set_iparm(Minv,12,2)
-        end
-
-        new(n1,m1, h, ndelta*h,ind_0, ind_1, ind_n, ind_np, Minv,Mapproxsp ,
+        new(n1,m1, h, ndelta*h,ind_0, ind_1, ind_n, ind_np, [] ,Mapproxsp ,
             x, y1, [y[ind1] y[indn]], indVolInt, indVol,
             indVolIntLocal, solvertype)
+    end
+end
+
+function factorize!(subdomain::Subdomain)
+        # TODO : factorization has to be performed separately
+        println("Factorizing the local matrix")
+        if subdomain.solvertype == "UMFPACK"
+            subdomain.Hinv = lufact(subdomain.H);
+        end
+
+        if subdomain.solvertype == "MKLPARDISO"
+            subdomain.Hinv = MKLPardisoSolver();
+            set_nprocs(subdomain.Hinv, 16)
+            #setting the type of the matrix
+            set_mtype(subdomain.Hinv,3)
+            # setting we are using a transpose
+            set_iparm(subdomain.Hinv,12,2)
+            # setting the factoriation phase
+            set_phase(subdomain.Hinv, 12)
+            X = zeros(Complex128, subdomain.n*subdomain.m,1)
+            # factorizing the matrix
+            pardiso(subdomain.Hinv,X, subdomain.H,X)
+            set_phase(subdomain.Hinv, 33)
+            set_iparm(subdomain.Hinv,12,2)
+        end
+end
+
+function convert64_32!(subdomain::Subdomain)
+    if subdomain.solvertype == "MKLPARDISO"
+        subdomain.H = SparseMatrixCSC{Complex128,Int32}(subdomain.H)
+    else
+        println("This method is only to make PARDISO more efficient")
     end
 end
 
@@ -122,6 +133,7 @@ function solve(subdomain::Subdomain, f::Array{Complex128,1})
         if subdomain.solvertype == "UMFPACK"
             u = subdomain.Hinv\f[:];
         end
+        # if the linear solvers is MKL Pardiso
         if subdomain.solvertype == "MKLPARDISO"
             set_phase(subdomain.Hinv, 33)
             u = zeros(Complex128,length(f))
