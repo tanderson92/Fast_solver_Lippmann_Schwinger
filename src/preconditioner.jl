@@ -40,6 +40,7 @@ function \(M::Preconditioner, b::Array{Complex128,1})
     #println("Applying the sparsifying Preconditioner")
     
     y = zeros(b)
+    # small 
     if M.mkl_sparseBlas
         x0 = zeros(b);
         beta = Complex128(1+0im)
@@ -48,7 +49,9 @@ function \(M::Preconditioner, b::Array{Complex128,1})
     else
         x0 =  M.As*b; 
     end
-    gmres!(y, M.Msp, x0 , M.GSPreconditioner, tol = 1e-4)
+    info = gmres!(y, M.Msp, x0 , M.GSPreconditioner, tol = 1e-4)
+    println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
+
     #y = M.GSPreconditioner\(M.As*b)
     return y
 end
