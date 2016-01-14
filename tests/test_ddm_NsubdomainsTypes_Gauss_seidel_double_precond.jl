@@ -1,5 +1,7 @@
 # small script to test how to perform the domain decomposition
 # we try to compute fast solution without tampering with A directly,
+# in this file we add the possibility to use Sparse MKL for the matrix
+# vector multiplication
 
 
 # Clean version of the DDM ode
@@ -7,7 +9,7 @@
 using PyPlot
 using Devectorize
 using IterativeSolvers
-#using Pardiso
+using Pardiso
 
 include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
@@ -15,8 +17,13 @@ include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
 
 #Defining Omega
-h = 0.0005
+h = 0.001
 k = 1/h
+
+# setting the correct number of threads for FFTW and
+# BLAS, this can be further
+FFTW.set_num_threads(4)
+blas_set_num_threads(4)
 
 println("Frequency is ", k/(2*pi))
 println("Number of discretization points is ", 1/h)
@@ -31,7 +38,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 80;
+nSubdomains = 20;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -61,7 +68,7 @@ fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
 
 u_inc = exp(k*im*Y);
 
-imshow(real(reshape( 1- nu(X,Y),n,m)))
+#imshow(real(reshape( 1- nu(X,Y),n,m)))
 
 println("Building the A sparse")
 @time As = buildSparseA(k,X,Y,D0, n ,m);
@@ -84,14 +91,22 @@ idxn = SubDomLimits[2:end]-1
 #npml = round(Integer, ((m-1)/nSubdomains)/2)
 npml = 10
 
-tic();
-#SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
-SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], npml, h, nu, k) for ii = 1:nSubdomains];
-println("Time for the factorization ", toc())
+SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
+#SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], npml, h, nu, k) for ii = 1:nSubdomains];
 
 # compute the right hand side
 rhs = -(fastconv*u_inc - u_inc);
 
+# this step is a hack to avoid building new vectors in int32 every time
+for ii = 1:nSubdomains
+	convert64_32!(SubArray[ii])
+end
+
+tic();
+for ii=1:nSubdomains
+	factorize!(SubArray[ii])
+end
+println("Time for the factorization ", toc())
 
 # Testing the Polarized traces preconditioner
 # GSPrecond = GSPreconditioner(SubArray)
@@ -104,14 +119,20 @@ rhs = -(fastconv*u_inc - u_inc);
 # instanciating the new preconditioner
 Precond = Preconditioner(As,Mapproxsp,SubArray)
 
+# PrecondMKL = Preconditioner(As,Mapproxsp,SubArray, mkl_sparseBlas = true)
+
 # building the RHS from the incident field
 u_inc = exp(k*im*Y);
 rhs = -(fastconv*u_inc - u_inc);
 
 u = zeros(Complex128,N);
 @time info =  gmres!(u, fastconv, rhs, Precond)
+
+# u = zeros(Complex128,N);
+# @time info2 =  gmres!(u, fastconv, rhs, PrecondMKL)
+
 println(info[2].residuals[:])
 println("Number of iterations to convergence is ", countnz(info[2].residuals[:]))
 
 
-imshow(real(reshape(u+u_inc,n,m)))
+#imshow(real(reshape(u+u_inc,n,m)))
