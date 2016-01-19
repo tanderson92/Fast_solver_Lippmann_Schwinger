@@ -30,7 +30,7 @@ import Base.\
 
 function \(M::GSPreconditioner, b::Array{Complex128,1})
     #println("Applying the polarized Traces Preconditioner")
-    
+
     # TODO add more options to the type of preconditioner used
     #return precondGS(M.subDomains, b)
     return precondGSOptimized(M.subDomains, b)
@@ -38,18 +38,18 @@ end
 
 function \(M::Preconditioner, b::Array{Complex128,1})
     #println("Applying the sparsifying Preconditioner")
-    
+
     y = zeros(b)
-    # small 
+    # small
     if M.mkl_sparseBlas
         x0 = zeros(b);
         beta = Complex128(1+0im)
         SparseBLAS.cscmv!('N',beta,"GXXF",M.As,b,beta,x0)
         #println("using sparse blas!")
     else
-        x0 =  M.As*b; 
+        x0 =  M.As*b;
     end
-    info = gmres!(y, M.Msp, x0 , M.GSPreconditioner, tol = 1e-4)
+    info = gmres!(y, M.Msp, x0 , M.GSPreconditioner, tol = 1e-2)
     println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
 
     #y = M.GSPreconditioner\(M.As*b)
