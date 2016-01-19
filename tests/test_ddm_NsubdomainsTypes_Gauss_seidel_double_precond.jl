@@ -17,7 +17,7 @@ include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
 
 #Defining Omega
-h = 0.00125
+h = 0.001
 k = 1/h
 
 # setting the correct number of threads for FFTW and
@@ -38,7 +38,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 16;
+nSubdomains = 20;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -97,7 +97,7 @@ idx1 = SubDomLimits[1:end-1]
 idxn = SubDomLimits[2:end]-1
 
 #npml = round(Integer, ((m-1)/nSubdomains)/2)
-npml = 13
+npml = 14
 
 SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], 20, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
 #SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], npml, h, nu, k) for ii = 1:nSubdomains];
