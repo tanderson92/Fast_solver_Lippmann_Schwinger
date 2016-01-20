@@ -117,7 +117,7 @@ function \(M::doublePreconditioner, b::Array{Complex128,1})
     else
         x0 =  M.As*b;
     end
-    info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = 20, maxiter = 1, tol = 1e-4)
+    info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = 20, maxiter = 1, tol = 1e-2)
     println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
 
     #y = M.GSPreconditioner\(M.As*b)
@@ -420,7 +420,7 @@ function precondJacobi(subDomains, source::Array{Complex128,1})
 
         uLocal = solve(subDomains[ii],rhsLocaltemp)
 
-        uPrecond = vcat(uPrecond,uLocal[subDomains[ii].indVolIntLocal])
+        uPrecond = vcat(uPrecond,uLocal[suDbomains[ii].indVolIntLocal])
     end
     return  uPrecond
 end
