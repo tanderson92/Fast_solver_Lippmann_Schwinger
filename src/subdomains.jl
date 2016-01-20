@@ -44,13 +44,21 @@ type Subdomain
         spline(y) = (y.<0) +  (y.>=0).*(y.<1).*(2*y.^3 - 3*y.^2 + 1)
         filter(a1,b1,b2,a2,y) = (y.>=a1).*( (y.<b1).*spline(1/(abs(b1-a1)).*(-y+b1)) + (y.>=b1).*(y.<b2) + (y.>=b2).*spline(1/(abs(b2-a2)).*(y-b2)))
 
+
+        # We add the complex shift in here
+        filtershift(a1,a2,y) = (y.<=a1).*( (y-a1).^2) +  (y.>=a2).*( (y-a2).^2);
+        shift = k
+        println("using shift = k")
         # defining the speed with the correct cut-off
         if ind1 == 1
-            nu1(x,y) = filter(y1[1]-h, y1[1], y1[end-ndelta+2], y1[end-2] , y).*nu(x,y);
+            nu1(x,y) = filter(y1[1]-h, y1[1], y1[end-ndelta+2], y1[end-2] , y).*(
+                        nu(x,y) - shift*im*filtershift(y1[1]-h, y1[end-ndelta+2],y)) ;
         elseif indn == length(y)
-             nu1(x,y) = filter(y1[3], y1[ndelta-2], y1[end], y1[end]+h , y).*nu(x,y);
+            nu1(x,y) = filter(y1[3], y1[ndelta-2], y1[end], y1[end]+h , y).*(
+                        nu(x,y) - shift*im*filtershift( y1[ndelta-2],y1[end]+h,y)) ;
         else
-            nu1(x,y) = filter(y1[3], y1[ndelta-2], y1[end-ndelta+2], y1[end-2] , y).*nu(x,y);
+            nu1(x,y) = filter(y1[3], y1[ndelta-2], y1[end-ndelta+2], y1[end-2] , y).*(
+                        nu(x,y)- shift*im*filtershift(y1[ndelta-2], y1[end-ndelta+2],y));
         end
 
         println("Getting the Indices")
