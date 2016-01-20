@@ -1,6 +1,30 @@
 # We add the preconditioner (Gauss Seidel type in this file)
 # we need to be sure to be having just a pointer
 
+
+type doubleGSPreconditioner
+    n::Int64  # number of grid points in the x direction
+    nSubs::Int64
+    subDomains1
+    subDomains2
+    Msp::SparseMatrixCSC{Complex{Float64},Int64}
+    T::SparseMatrixCSC{Complex{Float64},Int64} # tranposition matrix
+    tol::Float64
+    precondtype # preconditioner type Jacobi, GaussSeidel Opt
+    function doubleGSPreconditioner(subDomains1, subDomains2, Msp; tol = 1e-4, precondtype ="GS")
+        n = subDomains1[1].n
+        N = n*n; # we suppose that the domain is squared
+        T = speye(N);
+        index = 1:N;
+        index = (reshape(index, n,m).')[:];
+        T = T[index,:];
+        nSubs = length(subDomains1)
+        new(n,nSubs, subDomains1,subDomains2,Msp, T, tol,precondtype) # don't know if it's the best answer
+    end
+end
+
+
+
 type GSPreconditioner
     n::Int64  # number of grid points in the x direction
     nSubs::Int64
@@ -13,6 +37,19 @@ type GSPreconditioner
         new(n,nSubs, subDomains, tol,precondtype) # don't know if it's the best answer
     end
 end
+
+
+type doublePreconditioner
+    As::SparseMatrixCSC{Complex{Float64},Int64}
+    Msp::SparseMatrixCSC{Complex{Float64},Int64}
+    doubleGSPreconditioner
+    mkl_sparseBlas
+    function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false)
+        new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas) # don't know if it's the best answer
+    end
+
+end
+
 
 type Preconditioner
     As::SparseMatrixCSC{Complex{Float64},Int64}
@@ -27,6 +64,17 @@ end
 
 # Encapsulation of the preconditioner in order to use preconditioned GMRES
 import Base.\
+
+function \(M::doubleGSPreconditioner, b::Array{Complex128,1})
+    #println("Applying the polarized Traces Preconditioner")
+
+    # TODO add more options to the type of preconditioner used
+    #return precondGS(M.subDomains, b)
+    u = precondGSOptimized(M.subDomains1, b)
+    err = M.Msp*u - b;
+    u2 = (M.T).'*(precondGSOptimized(M.subDomains2, M.T*err))
+    return u-u2
+end
 
 function \(M::GSPreconditioner, b::Array{Complex128,1})
     #println("Applying the polarized Traces Preconditioner")
@@ -49,7 +97,27 @@ function \(M::Preconditioner, b::Array{Complex128,1})
     else
         x0 =  M.As*b;
     end
-    info = gmres!(y, M.Msp, x0 , M.GSPreconditioner, restart = 6, maxiter = 1, tol = 1e-4)
+    info = gmres!(y, M.Msp, x0 , M.GSPreconditioner, restart = 20, maxiter = 1, tol = 1e-4)
+    println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
+
+    #y = M.GSPreconditioner\(M.As*b)
+    return y
+end
+
+function \(M::doublePreconditioner, b::Array{Complex128,1})
+    #println("Applying the sparsifying Preconditioner")
+
+    y = zeros(b)
+    # small
+    if M.mkl_sparseBlas
+        x0 = zeros(b);
+        beta = Complex128(1+0im)
+        SparseBLAS.cscmv!('N',beta,"GXXF",M.As,b,beta,x0)
+        #println("using sparse blas!")
+    else
+        x0 =  M.As*b;
+    end
+    info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = 20, maxiter = 1, tol = 1e-4)
     println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
 
     #y = M.GSPreconditioner\(M.As*b)
