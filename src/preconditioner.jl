@@ -9,8 +9,9 @@ type doubleGSPreconditioner
     subDomains2
     Msp::SparseMatrixCSC{Complex{Float64},Int64}
     T::SparseMatrixCSC{Complex{Float64},Int64} # tranposition matrix
+    Tt::SparseMatrixCSC{Complex{Float64},Int64} # the transpose of T
     tol::Float64
-    precondtype # preconditioner type Jacobi, GaussSeidel Opt
+    precondtype # inner GMRES loop or not
     function doubleGSPreconditioner(subDomains1, subDomains2, Msp; tol = 1e-4, precondtype ="GS")
         n = subDomains1[1].n
         N = n*n; # we suppose that the domain is squared
@@ -19,7 +20,7 @@ type doubleGSPreconditioner
         index = (reshape(index, n,m).')[:];
         T = T[index,:];
         nSubs = length(subDomains1)
-        new(n,nSubs, subDomains1,subDomains2,Msp, T, tol,precondtype) # don't know if it's the best answer
+        new(n,nSubs, subDomains1,subDomains2,Msp, T,T.', tol,precondtype) # don't know if it's the best answer
     end
 end
 
@@ -44,8 +45,9 @@ type doublePreconditioner
     Msp::SparseMatrixCSC{Complex{Float64},Int64}
     doubleGSPreconditioner
     mkl_sparseBlas
-    function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false)
-        new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas) # don't know if it's the best answer
+    maxIter::Int64  # maximum number of inner iterations 
+    function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false,  maxIter = 20)
+        new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas, maxIter) # don't know if it's the best answer
     end
 
 end
@@ -72,7 +74,7 @@ function \(M::doubleGSPreconditioner, b::Array{Complex128,1})
     #return precondGS(M.subDomains, b)
     u = precondGSOptimized(M.subDomains1, b)
     err = M.Msp*u - b;
-    u2 = (M.T).'*(precondGSOptimized(M.subDomains2, M.T*err))
+    u2 = (M.Tt)*(precondGSOptimized(M.subDomains2, M.T*err))
     return u-u2
 end
 
@@ -107,20 +109,22 @@ end
 function \(M::doublePreconditioner, b::Array{Complex128,1})
     #println("Applying the sparsifying Preconditioner")
 
-    y = zeros(b)
-    # small
-    if M.mkl_sparseBlas
-        x0 = zeros(b);
-        beta = Complex128(1+0im)
-        SparseBLAS.cscmv!('N',beta,"GXXF",M.As,b,beta,x0)
-        #println("using sparse blas!")
+    if M.maxIter != 0
+        y = zeros(b)
+        # small
+        if M.mkl_sparseBlas
+            x0 = zeros(b);
+            beta = Complex128(1+0im)
+            SparseBLAS.cscmv!('N',beta,"GXXF",M.As,b,beta,x0)
+            #println("using sparse blas!")
+        else
+            x0 =  M.As*b;
+        end
+        info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = M.maxIter, maxiter = 1, tol = 1e-2)
+        println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
     else
-        x0 =  M.As*b;
+        y = M.doubleGSPreconditioner\(M.As*b)
     end
-    info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = 20, maxiter = 1, tol = 1e-2)
-    println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
-
-    #y = M.GSPreconditioner\(M.As*b)
     return y
 end
 
