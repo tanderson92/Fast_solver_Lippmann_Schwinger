@@ -8,7 +8,7 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 #Defining Omega
-h = 0.0005
+h = 0.01
 k = 1/h
 
 println("Frequency is ", k/(2*pi))
@@ -24,7 +24,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 20;
+nSubdomains = 4;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -73,7 +73,7 @@ u = zeros(Complex128,N);
 @time info =  gmres!(u, precond, Minv\(As*rhs))
 println(info[2].residuals[:])
 
-# defining the mkl solver
+# defining the mkl solver (this needs to be encapsulated)
 
 solverMKL = MKLPardisoSolver();
 
