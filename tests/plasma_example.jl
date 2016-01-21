@@ -17,7 +17,7 @@ include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
 
 #Defining Omega
-h = 0.00125
+h = 0.0025
 k = (1/h)
 
 # setting the correct number of threads for FFTW and
@@ -38,7 +38,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 16;
+nSubdomains = 8;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -95,7 +95,7 @@ idx1 = SubDomLimits[1:end-1]
 idxn = SubDomLimits[2:end]-1
 
 #npml = round(Integer, ((m-1)/nSubdomains)/2)
-npml = 20
+npml = 10
 T = speye(N);
 
 index = 1:N;
@@ -148,7 +148,7 @@ println("Time for the factorization ", toc())
 # Precond2 = Preconditioner(AsT,MapproxspT,SubArray2);
 # # PrecondMKL = Preconditioner(As,Mapproxsp,SubArray, mkl_sparseBlas = true)
 
-doublePrecond = doublePreconditioner(As,Mapproxsp,SubArray1,SubArray2);
+doublePrecond = doublePreconditioner(As,Mapproxsp,SubArray1,SubArray2; maxIter = 0);
 
 # building the RHS from the incident field
 # theta = rand(1)[1]*2*pi
