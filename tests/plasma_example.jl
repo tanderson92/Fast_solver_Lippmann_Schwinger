@@ -17,7 +17,7 @@ include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
 
 #Defining Omega
-h = 0.0025
+h = 0.00125
 k = (1/h)
 
 # setting the correct number of threads for FFTW and
@@ -38,7 +38,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 8;
+nSubdomains = 16;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -162,7 +162,19 @@ u = zeros(Complex128,N);
 # u = zeros(Complex128,N);
 # @time info2 =  gmres!(u, fastconv, rhs, PrecondMKL)
 
-println(info[2].residuals[:])
+#println(info[2].residuals[:])
+println("Number of iterations to convergence is ", countnz(info[2].residuals[:]))
+
+u_inc = exp(k*im*Y);
+rhs = -(fastconv*u_inc - u_inc);
+
+u = zeros(Complex128,N);
+@time info =  gmres!(u, fastconv, rhs, doublePrecond)
+
+# u = zeros(Complex128,N);
+# @time info2 =  gmres!(u, fastconv, rhs, PrecondMKL)
+
+#println(info[2].residuals[:])
 println("Number of iterations to convergence is ", countnz(info[2].residuals[:]))
 
 figure(2); clf();
