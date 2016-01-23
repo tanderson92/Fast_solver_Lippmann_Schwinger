@@ -6,7 +6,7 @@
 type FastM
     # type to encapsulate the fast application of M = I + omega^2G*spadiagm(nu)
     GFFT :: Array{Complex128,2}
-    nu :: Array{Complex128,1}
+    nu :: Array{Complex128,1} # 
     # number of points in the extended domain
     ne :: Int64
     me :: Int64
