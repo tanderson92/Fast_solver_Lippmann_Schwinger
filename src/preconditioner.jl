@@ -24,6 +24,20 @@ type doubleGSPreconditioner
     end
 end
 
+type PolarizedTracesPreconditioner
+    As::SparseMatrixCSC{Complex{Float64},Int64}
+    subDomains
+    IntegralPreconditioner
+    tol::Float64
+    nIt::Int64
+    precondtype
+    mkl_sparseBlas
+     function PolarizedTracesPreconditioner(As,subDomains; nIt = 1, tol = 1e-2, precondtype ="GS",
+                                            mkl_sparseBlas=false)
+        IntPrecond = IntegralPreconditioner(subDomains, nIt = nIt, precondtype = precondtype)
+        new(As,subDomains,IntPrecond,tol,nIt,precondtype,mkl_sparseBlas) # don't know if it's the best answer
+    end
+end
 
 
 type GSPreconditioner
@@ -105,6 +119,26 @@ function \(M::Preconditioner, b::Array{Complex128,1})
     #y = M.GSPreconditioner\(M.As*b)
     return y
 end
+
+
+function \(M::PolarizedTracesPreconditioner, b::Array{Complex128,1})
+    #println("Applying the sparsifying Preconditioner")
+
+    f = extractRHS(M.subDomains, M.As*b);
+    fPol = -vectorizePolarizedBdyDataRHS(M.subDomains, f);
+    uPol = zeros(fPol)
+
+    info = gmres!(uPol,x->(applyMMOpt(M.subDomains, x)), fPol, M.IntegralPreconditioner, tol = M.tol)
+
+    println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
+    u = uPol[1:round(Integer, end/2)] + uPol[round(Integer, end/2)+1:end]
+    (v0,v1,vn,vnp) = devectorizeBdyDataContiguous(M.subDomains, u)
+
+    U = reconstruction(M.subDomains, M.As*b, v0, v1, vn, vnp);
+    #y = M.GSPreconditioner\(M.As*b)
+    return U[:]
+end
+
 
 function \(M::doublePreconditioner, b::Array{Complex128,1})
     #println("Applying the sparsifying Preconditioner")
@@ -607,94 +641,3 @@ function precondGSOptimized(subDomains, source::Array{Complex128,1})
     return  uPrecond
 end
 
-
-########################################################################################
-#                                                                                      #
-#     Preconditioners for the Integral System                                          #
-#                                                                                      #
-########################################################################################
-
-type IntegralPreconditioner
-    n::Int64  # number of grid points in the x direction
-    nSubs::Int64
-    subDomains
-    nIt::Int64
-    precondtype # preconditioner type Jacobi, GaussSeidel Opt
-    function IntegralPreconditioner(subDomains; nIt = 1, precondtype ="GS")
-        n = subDomains[1].n
-        nSubs = length(subDomains)
-        new(n,nSubs, subDomains,nIt, precondtype) # don't know if it's the best answer
-    end
-end
-
-function \(M::IntegralPreconditioner, b::Array{Complex128,1})
-    #println("Applying the polarized Traces Preconditioner")
-    if M.precondtype == "GS"
-        return PrecondGaussSeidel(M.subArray, b, M.nit)
-    elseif M.precondtype == "Jac"
-        return PrecondJacobi(M.subArray, b, M.nit)
-    end 
-end
-
-function PrecondJacobi(subArray, v, nit)
-    # function to apply the block Jacobi preconditioner using the data
-    # TODO add dimension checks
-    u = 0*v;
-    for ii = 1:nit
-        # splitting the vector in two parts
-        udown = u[1:end/2];
-        uup   = u[(1+end/2):end];
-        # f - Ru^{n-1}
-        if norm(u)!=0
-            udownaux = v[1:end/2]       - applyU(subArray, uup);
-            uupaux   = v[(1+end/2):end] - applyL(subArray, udown);
-        else
-            udownaux = v[1:end/2]
-            uupaux   = v[(1+end/2):end] 
-        end
-
-        vdown = applyDinvDown(subArray,udownaux);
-        vup   = applyDinvUp(subArray,uupaux);
-        u    = vcat(vdown, vup );
-    end
-    return u;
-end
-
-function PrecondGaussSeidel(subArray, v, nit; verbose=false)
-    # function to apply the block Gauss-Seidel Preconditioner
-    # input :   subArray  array pointer to the set of subdomains
-    #           v         rhs to be solved
-    #           nit       number of iterations
-    # output:   u         Approximated solution
-    # using a first guess equals to zero
-
-    println("Applying the preconditioner");
-    u = 0*v;
-    for ii = 1:nit
-
-        # splitting the vector in two parts
-        udown = u[1:end/2];
-        uup   = u[(1+end/2):end];
-
-        # f - Ru^{n-1}
-        if norm(u)  != 0
-            udownaux = v[1:end/2]       - applyU(subArray, uup);
-        else
-            udownaux = v[1:end/2] 
-        end
-        uupaux   = v[(1+end/2):end] ;
-
-        # applying the inverses
-        vdown = applyDinvDown(subArray,udownaux);
-        vup   = applyDinvUp(subArray, uupaux - applyL(subArray,vdown));
-
-        if verbose
-            println("magnitude of the update = ", norm(u[:] -  vcat(vdown, vup ))/norm(v[:]));
-        end
-
-        # concatenatinc the solution
-        u    = vcat(vdown, vup );
-
-    end
-    return u;
-end

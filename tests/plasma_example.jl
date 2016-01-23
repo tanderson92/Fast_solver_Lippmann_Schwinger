@@ -74,7 +74,7 @@ GFFT = fft(Ge);
 
 fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
 figure(1); clf();
-imshow(real(reshape( (1- nu(X,Y)),n,m)), extent=[x[1], x[end], y[1], y[end]]);cb =  colorbar();
+imshow(real(reshape( (1-nu(X,Y)),n,m)), extent=[x[1], x[end], y[1], y[end]]);cb =  colorbar();
 
 println("Building the A sparse")
 @time As = buildSparseA(k,X,Y,D0, n ,m);
