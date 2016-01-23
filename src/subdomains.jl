@@ -193,10 +193,10 @@ function applyBlockOperator(subdomain::Subdomain,v0,v1,vN,vNp)
 
     u = solve(subdomain, f[:]);
 
-    u0  = u[subdomain.ind_0  ];
-    u1  = u[subdomain.ind_1  ];
-    uN  = u[subdomain.ind_n  ];
-    uNp = u[subdomain.ind_np ];
+    u0  = u[subdomain.ind_0 ];
+    u1  = u[subdomain.ind_1 ];
+    uN  = u[subdomain.ind_n ];
+    uNp = u[subdomain.ind_np];
     return (u0,u1,uN,uNp)
 
 end
@@ -254,11 +254,6 @@ function extractFullBoundaryData(subDomains, uLocalArray)
     u_np = zeros(Complex128,n*nSubs)
 
     index = 1:n
-
-    # Downward sweep
-
-    u_n[index]  = uLocalArray[1][subDomains[1].ind_n]
-    u_np[index] = uLocalArray[1][subDomains[1].ind_np]
 
     # populate the traces
 
@@ -328,7 +323,44 @@ function devectorizeBdyData(subArray, uGamma)
         end
     end
     return (v0,v1,vN,vNp)
+end
 
+function devectorizeBdyDataContiguous(subArray, uGamma)
+    # function to tranform the vectorial uGamma in to a set of 4 arrays for an easier
+    # evaluation of the integral operators
+
+    # obtaining the number of layers
+    nLayer = size(subArray)[1];
+    nSurf = SubArray[1].n;
+    nInd = 1:nSurf;
+
+    v0  = zeros(Complex128, nSurf*nLayer);
+    v1  = zeros(Complex128, nSurf*nLayer);
+    vN  = zeros(Complex128, nSurf*nLayer);
+    vNp = zeros(Complex128, nSurf*nLayer);
+
+    for ii = 1:nLayer
+        if ii == 1
+            # extract the good traces and set to zero the other
+            v0[nInd]  = 0*uGamma[nInd];
+            v1[nInd]  = 0*uGamma[nInd];
+            vN[nInd]  = uGamma[nInd];
+            vNp[nInd] = uGamma[nInd+nSurf];
+        elseif ii == (nLayer)
+            #extract the good traces and put the rest to zero
+            v0[nInd+ (ii-1)*n] =   uGamma[nInd+(2*ii-4)*nSurf];
+            v1[nInd+ (ii-1)*n] =   uGamma[nInd+(2*ii-3)*nSurf];
+            vN[nInd+ (ii-1)*n] =  0*uGamma[nInd+(2*ii-4)*nSurf];
+            vNp[nInd+ (ii-1)*n] = 0*uGamma[nInd+(2*ii-3)*nSurf];
+        else
+            # fill the rest of the arrays with the data
+            v0[nInd+ (ii-1)*n]  =   uGamma[nInd+(2*ii-4)*nSurf];
+            v1[nInd+ (ii-1)*n]  =   uGamma[nInd+(2*ii-3)*nSurf];
+            vN[nInd+ (ii-1)*n]  =   uGamma[nInd+(2*ii-2)*nSurf];
+            vNp[nInd+ (ii-1)*n] =   uGamma[nInd+(2*ii-1)*nSurf];
+        end
+    end
+    return (v0,v1,vN,vNp)
 end
 
 
@@ -342,7 +374,6 @@ function vectorizeBdyData(subDomains, uBdyData)
 
     uBdy[nInd] = uBdyData[3][nInd];
     for ii = 1:nSubs-2
-        println(ii)
         uBdy[nInd+(2*ii-1)*n] = uBdyData[2][(ii*n +nInd)];
         uBdy[nInd+2*ii*n]     = uBdyData[3][(ii*n +nInd)];
     end
@@ -351,6 +382,35 @@ function vectorizeBdyData(subDomains, uBdyData)
     return uBdy
 end
 
+
+function vectorizePolarizedBdyDataRHS(subDomains,uBdyData)
+    # function to take the output of extract Boundary data and put it in vectorized form
+    
+    nSubs = length(subDomains);
+    n = subDomains[1].n
+
+    f1 = zeros(Complex{Float64},2*(nSubs-1)*n);
+    nInd = 1:n;
+
+    f1[nInd] = uBdyData[3][nInd];
+    for ii = 1:nSubs-2
+        f1[nInd+(2*ii-1)*n] = uBdyData[2][(ii*n +nInd)];
+        f1[nInd+2*ii*n]     = uBdyData[3][(ii*n +nInd)];
+    end
+    f1[nInd+(2*nSubs-3)*n] = uBdyData[2][(nSubs-1)*n+nInd];
+
+    f0 = zeros(Complex{Float64},2*(nSubs-1)*n);
+    nInd = 1:n;
+
+    f0[nInd] =  uBdyData[4][nInd];
+    for ii = 1:nSubs-2
+        f0[nInd+(2*ii-1)*n] = uBdyData[1][ii*n+ nInd];
+        f0[nInd+2*ii*n]     = uBdyData[4][ii*n+ nInd];
+    end
+    f0[nInd+(2*nSubs-3)*n] = uBdyData[1][(nSubs-1)*n+nInd];
+
+    return vcat(f1,f0)
+end
 
 function vectorizePolarizedBdyData(subDomains,uBdyData)
     # function to take the output of extract Boundary data and put it in vectorized form
@@ -361,21 +421,22 @@ function vectorizePolarizedBdyData(subDomains,uBdyData)
 
     nInd = 1:n;
 
-    uBdy[nInd]       = uBdyData[3][nInd];
+    uBdy[nInd]   = uBdyData[3][nInd];
     uBdy[nInd+n] = uBdyData[4][nInd];
 
     for ii = 1:nSubs-2
-        uBdy[nInd+(4*ii-2)*n] = uBdyData[1][(ii)*n+nInd];
-        uBdy[nInd+(4*ii-1)*n] = uBdyData[2][(ii)*n+nInd];
-        uBdy[nInd+(4*ii  )*n] = uBdyData[3][(ii)*n+nInd];
-        uBdy[nInd+(4*ii+1)*n] = uBdyData[4][(ii)*n+nInd];
+        uBdy[nInd+(4*ii-2)*n] = uBdyData[1][ii*n+ nInd];
+        uBdy[nInd+(4*ii-1)*n] = uBdyData[2][ii*n+ nInd];
+        uBdy[nInd+(4*ii  )*n] = uBdyData[3][ii*n+ nInd];
+        uBdy[nInd+(4*ii+1)*n] = uBdyData[4][ii*n+ nInd];
     end
     ii = nSubs-1
-    uBdy[nInd+(4*ii-2)*n] = uBdyData[1][(ii)*n+nInd];
-    uBdy[nInd+(4*ii-1)*n] = uBdyData[2][(ii)*n+nInd];
+    uBdy[nInd+(4*ii-2)*n] = uBdyData[1][(ii*n+nInd)];
+    uBdy[nInd+(4*ii-1)*n] = uBdyData[2][(ii*n+nInd)];
 
     return uBdy
 end
+
 
 function applyM(SubArray, uGamma)
     # function to apply M to uGamma
@@ -389,9 +450,9 @@ function applyM(SubArray, uGamma)
     Au = [ applyBlockOperator(SubArray[ii],v0[ii],v1[ii],vN[ii],vNp[ii]) for ii = 1:nLayer ];
 
     # it need to be a vector
-    Au = vectorizeBdyDataV2(Au);
+    u = vectorizeBdyDataV2(Au);
 
-    Mu = Au - uGamma;
+    Mu = u - uGamma;
 
     return Mu[:]
 
@@ -400,7 +461,7 @@ end
 
 function vectorizeBdyDataV2(uBdyData)
     # function to take the output of extract Boundary data and put it in vectorized form
-    nLayer = length(uBdyData[1])
+    nLayer = length(uBdyData)
     nn     = length(uBdyData[1][3])
 
     uBdy = zeros(Complex{Float64},2*(nLayer-1)*nn);
@@ -414,13 +475,13 @@ function vectorizeBdyDataV2(uBdyData)
     end
     uBdy[nInd+(2*nLayer-3)*nn] = uBdyData[nLayer][2];
 
-    return uBdy
+    return uBdy[:]
 end
 
 
 
 
-# Function for the application of the different blocks of the integral system 
+# Function for the application of the different blocks of the integral system
 function applyMup(subDomains, uGamma)
     # function to apply M to uGamma
     # input subDomains : an array of subdomains
@@ -431,7 +492,7 @@ function applyMup(subDomains, uGamma)
 
     # obtaining the number of layers
     nLayer = size(subDomains)[1];
-    nSurf = subDomains[1].n    
+    nSurf = subDomains[1].n
     nInd = 1:nSurf;
 
     # applying this has to be done in parallel applying RemoteRefs
@@ -512,7 +573,7 @@ function applyM0up(subDomains, uGamma)
         Mu[nInd + (2*ii  )*nSurf] =            + vec(vN[ii+1][4]);
     end
     ii = nLayer-1;
-    Mu[nInd + (2*ii-1)*nSurf] = -  u0[ii+1] + vec(v1[ii+1][1]);
+    Mu[nInd + (2*ii-1)*nSurf] = -  u0[ii+1] #+ vec(v1[ii+1][1]); # this last one has to be zero
 
     return Mu[:]
 
@@ -562,8 +623,6 @@ function applyMM(subDomains, uGammaPol)
 end
 
 ## now the functions for the preconditioners
-
-
 
 function applyDdown(subDomains, uGamma)
     # obtaining the number of layers
@@ -760,8 +819,9 @@ function generatePermutationMatrix(n::Int64,nSubs::Int64 )
     return P;
 end
 
-function reconstruction(subDomains, source, u_0, u1, un, unp)
-    
+
+function reconstruction(subDomains, source, u0, u1, un, unp)
+
     nSubs = length(subDomains);
 
     localSizes = zeros(Int64,nSubs)
@@ -780,6 +840,7 @@ function reconstruction(subDomains, source, u_0, u1, un, unp)
     localLim = [0; cumsum(localSizes)];
 
     uPrecond = zeros(Complex128, length(source))
+    index = 1:n
 
     for ii = 1:nSubs
 
@@ -794,18 +855,182 @@ function reconstruction(subDomains, source, u_0, u1, un, unp)
         # adding the source at the boundaries
         if ii!= 1
             # we need to be carefull at the edges
-            rhsLocaltemp[subDomains[ii].ind_1]  += -subDomains[ii].H[ind_1,ind_0]*un[(ii-2)*n + index]
-            rhsLocaltemp[subDomains[ii].ind_0]  +=  subDomains[ii].H[ind_0,ind_1]*unp[(ii-2)*n + index]
+            rhsLocaltemp[subDomains[ii].ind_1]  += -subDomains[ii].H[ind_1,ind_0]*u0[(ii-1)*n + index]
+            rhsLocaltemp[subDomains[ii].ind_0]  +=  subDomains[ii].H[ind_0,ind_1]*u1[(ii-1)*n + index]
 
         end
         if ii!= nSubs
-            rhsLocaltemp[subDomains[ii].ind_np] +=  subDomains[ii].H[ind_np,ind_n]*u0[(ii)*n + index]
-            rhsLocaltemp[subDomains[ii].ind_n]  += -subDomains[ii].H[ind_n,ind_np]*u1[(ii)*n + index]
+            rhsLocaltemp[subDomains[ii].ind_np] +=  subDomains[ii].H[ind_np,ind_n]*un[(ii-1)*n + index]
+            rhsLocaltemp[subDomains[ii].ind_n]  += -subDomains[ii].H[ind_n,ind_np]*unp[(ii-1)*n + index]
         end
+
 
         uLocal = solve(subDomains[ii],rhsLocaltemp)
 
         uPrecond[localLim[ii]+1:localLim[ii+1]] = uLocal[subDomains[ii].indVolIntLocal]
     end
     return  uPrecond
+end
+
+
+#####################################################################
+#                                                                   #
+#          Optimized Functions                                      #
+#                                                                   #
+#####################################################################
+
+
+# Function for the application of the different blocks of the integral system
+# This is an optimized version that uses only 4 solves per layer instead of 8
+# moreover, it allocates less memory
+function applyMMOpt(subDomains, uGamma)
+    # function to apply M to uGamma
+    # input subDomains : an array of subdomains
+    #       uGamma   : data on the boundaries in vector form
+
+    uDown = uGamma[1:round(Integer, end/2)]
+    uUp   = uGamma[1+round(Integer, end/2):end]
+    # convert uGamma in a suitable vector to be applied
+    (u0Down,u1Down,uNDown,uNpDown) = devectorizeBdyData(subDomains, uDown);
+    (u0Up  ,u1Up  ,uNUp  ,uNpUp)   = devectorizeBdyData(subDomains, uUp);
+
+    # obtaining the number of layers
+    nLayer = size(subDomains)[1];
+    nSurf = subDomains[1].n
+    nInd = 1:nSurf;
+
+    # applying this has to be done in parallel applying RemoteRefs
+    v1 = [ applyBlockOperator(subDomains[ii],u0Down[ii]         ,u1Down[ii]         ,
+                              uNUp[ii]+uNDown[ii],uNpUp[ii]+uNpDown[ii]) for ii = 1:nLayer ];
+    vN = [ applyBlockOperator(subDomains[ii],u0Down[ii]+u0Up[ii],u1Down[ii]+u1Up[ii],
+                              uNUp[ii]           ,uNpUp[ii]            ) for ii = 1:nLayer ];
+
+    Mu1 = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
+
+    Mu1[nInd] = - uNUp[1] - uNDown[1] + vec(vN[1][3]);
+
+    for ii=1:nLayer-2
+        Mu1[nInd + (2*ii-1)*nSurf] = - u1Up[ii+1] - u1Down[ii+1] + vec(v1[ii+1][2]);
+        Mu1[nInd + (2*ii  )*nSurf] = - uNUp[ii+1] - uNDown[ii+1] + vec(vN[ii+1][3]);
+    end
+    ii = nLayer-1;
+    Mu1[nInd + (2*ii-1)*nSurf] = - u1Up[ii+1] - u1Down[ii+1] + vec(v1[ii+1][2]) ;
+
+
+    v1 = [ applyBlockOperator(subDomains[ii],u0Down[ii],u1Down[ii],uNUp[ii]+uNDown[ii],uNpUp[ii]+uNpDown[ii]) for ii = 1:nLayer ];
+    vN = [ applyBlockOperator(subDomains[ii],u0Up[ii]+u0Down[ii],u1Down[ii]+u1Up[ii],uNUp[ii],uNpUp[ii]) for ii = 1:nLayer ];
+
+    Mu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
+
+
+    Mu[nInd] =  vec(vN[1][4])- uNpDown[1] ;
+
+    for ii=1:nLayer-2
+        Mu[nInd + (2*ii-1)*nSurf] = - u0Up[ii+1] + vec(v1[ii+1][1]);
+        Mu[nInd + (2*ii  )*nSurf] = - uNpDown[ii+1] + vec(vN[ii+1][4]);
+    end
+    ii = nLayer-1;
+    Mu[nInd + (2*ii-1)*nSurf] = -  u0Up[ii+1] + vec(v1[ii+1][1])
+
+    return vcat(Mu1,Mu)
+
+end
+
+
+
+
+function applyMdownOpt(subDomains, uGamma)
+    # function to apply M to uGamma
+    # input subDomains : an array of subdomains
+    #       uGamma   : data on the boundaries in vector form
+
+    # convert uGamma in a suitable vector to be applied
+    (u0,u1,uN,uNp) = devectorizeBdyData(subDomains, uGamma);
+
+    # obtaining the number of layers
+    nLayer = size(subDomains)[1];
+    nSurf = subDomains[1].n
+    nInd = 1:nSurf;
+
+    # applying the local solves (for loop)
+    v1 = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],  uN[ii],  uNp[ii]) for ii = 1:nLayer ];
+    vN = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],0*uN[ii],0*uNp[ii]) for ii = 1:nLayer ];
+
+    Mu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
+
+    Mu[nInd] =  - uN[1];
+
+    for ii=1:nLayer-2
+        Mu[nInd + (2*ii-1)*nSurf] = - u1[ii+1] + vec(v1[ii+1][2]);
+        Mu[nInd + (2*ii  )*nSurf] = - uN[ii+1] + vec(vN[ii+1][3]);
+    end
+    ii = nLayer-1;
+    Mu[nInd + (2*ii-1)*nSurf] = - u1[ii+1] + vec(v1[ii+1][2]);
+
+    return Mu[:]
+end
+
+function applyM0upOpt(subDomains, uGamma)
+    # function to apply M to uGamma
+    # input subDomains : an array of subdomains
+    #       uGamma   : data on the boundaries in vector form
+
+    # convert uGamma in a suitable vector to be applied
+    (u0,u1,uN,uNp) = devectorizeBdyData(subDomains, uGamma);
+
+    # obtaining the number of layers
+    nLayer = size(subDomains)[1];
+    nSurf = subDomains[1].n
+    nInd = 1:nSurf;
+
+    # applying
+    # remember  v[ii][1] = v0[ii], v[ii][2] = v1[ii],
+    #           v[ii][3] = vN[ii], v[ii][4] = vNp[ii]
+    v1 = [ applyBlockOperator(subDomains[ii],0*u0[ii],0*u1[ii],uN[ii],uNp[ii]) for ii = 1:nLayer ];
+    vN = [ applyBlockOperator(subDomains[ii],  u0[ii],  u1[ii],uN[ii],uNp[ii]) for ii = 1:nLayer ];
+
+    Mu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
+
+    Mu[nInd] =  vec(vN[1][4]);
+
+    for ii=1:nLayer-2
+        Mu[nInd + (2*ii-1)*nSurf] = - u0[ii+1] + vec(v1[ii+1][1]);
+        Mu[nInd + (2*ii  )*nSurf] =            + vec(vN[ii+1][4]);
+    end
+    ii = nLayer-1;
+    Mu[nInd + (2*ii-1)*nSurf] = -  u0[ii+1] #+ vec(v1[ii+1][1]); # this last one has to be zero
+
+    return Mu[:]
+
+end
+
+function applyM0downOpt(subDomains, uGamma)
+    # function to apply M to uGamma
+    # input subDomains : an array of subdomains
+    #       uGamma   : data on the boundaries in vector form
+
+    # convert uGamma in a suitable vector to be applied
+    (u0,u1,uN,uNp) = devectorizeBdyData(subDomains, uGamma);
+
+    # obtaining the number of layers
+    nLayer = size(subDomains)[1];
+    nSurf = subDomains[1].n
+    nInd = 1:nSurf;
+
+    # applying the local solves (for loop)
+    v1 = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],  uN[ii],  uNp[ii]) for ii = 1:nLayer ];
+    vN = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],0*uN[ii],0*uNp[ii]) for ii = 1:nLayer ];
+
+    Mu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
+
+    Mu[nInd] =  - uNp[1];
+
+    for ii=1:nLayer-2
+        Mu[nInd + (2*ii-1)*nSurf] =             + vec(v1[ii+1][1]);
+        Mu[nInd + (2*ii  )*nSurf] = - uNp[ii+1] + vec(vN[ii+1][4]);
+    end
+    ii = nLayer-1;
+    Mu[nInd + (2*ii-1)*nSurf] =   vec(v1[ii+1][1]);
+
+    return Mu[:]
 end
