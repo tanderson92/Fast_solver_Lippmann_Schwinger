@@ -6,7 +6,7 @@
 type FastM
     # type to encapsulate the fast application of M = I + omega^2G*spadiagm(nu)
     GFFT :: Array{Complex128,2}
-    nu :: Array{Complex128,1} # 
+    nu :: Array{Complex128,1} #
     # number of points in the extended domain
     ne :: Int64
     me :: Int64
@@ -47,6 +47,7 @@ end
 function sampleG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},indS::Array{Int64,1}, D0::Complex128)
     # function to sample the Green's function at frequency k
     Gc = zeros(Complex128, length(indS), length(X))
+    h = abs(X[1] - X[2]);
     for i = 1:length(indS)
         ii = indS[i]
         r  = sqrt( (X-X[ii]).^2 + (Y-Y[ii]).^2);
