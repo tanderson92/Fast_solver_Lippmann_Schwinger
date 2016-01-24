@@ -25,6 +25,8 @@ type Subdomain
         indFinish = (indn+ndelta) > length(y) ? length(y) : indn+ndelta;
         y1 = y[indStart : indFinish]
         x1 = copy(x)
+        n = length(x)
+        m = length(y)
         n1 = length(x1)
         m1 = length(y1)
         N1 = n1*m1
