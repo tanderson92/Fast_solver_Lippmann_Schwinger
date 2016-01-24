@@ -22,7 +22,7 @@ Subs = [ 4,8,16,32]
 
 NPML = [ 10, 12, 14, 16]
 
-maxInnerIter = 0
+maxInnerIter = 2
 
 for ll = 1:length(H)
 
@@ -30,7 +30,7 @@ for ll = 1:length(H)
 
     nSubdomains = Subs[ll];
 
-
+npml = NPML[ll]
 
 k = (1/h)
 # setting the correct number of threads for FFTW and
@@ -62,23 +62,29 @@ println("Number of Subdomains is ", nSubdomains)
 (ppw,D) = referenceValsTrapRule();
 D0 = D[1];
 
-# the perturbation
-C = 0.4987
-phi(x,y) = 1 - (x-0.05*(1-x.^2)).^2 - C*((1 + 0.3x).^2).*y.^2
 
-aa = [0.45, 0.196, 0.51, 0.195, 0.63 ];
-xI = [0.4 , 0.54 , -0.14, -0.5, 0.18];
-yI = [0   , -0.28, 0.70, -0.01, 0.8];
 
-g(x,y) = aa[1]*exp(-((x-xI[1]).^2 + (y-yI[1]).^2)/0.01 ) +
-         aa[2]*exp(-((x-xI[2]).^2 + (y-yI[2]).^2)/0.01 ) +
-         aa[3]*exp(-((x-xI[3]).^2 + (y-yI[3]).^2)/0.01 ) +
-         aa[4]*exp(-((x-xI[4]).^2 + (y-yI[4]).^2)/0.01 ) +
-         aa[5]*exp(-((x-xI[5]).^2 + (y-yI[5]).^2)/0.01 ) ;
+nu(x,y)=    -( 0.200*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-200*((x - 0.1).^2 + (y+0.1).^2)) +
+            0.200*exp(-2000*((x+0.11).^2 +   y.^2))         + 0.250*exp(-1000*(  (x-0.112).^2 + (y+0.1).^2)) +
+            0.100*exp(-200* ((x+0.31).^2 +   (y+0.30).^2))  + 0.120*exp(-1000*(  (x-0.128).^2 + (y+0.2).^2)) +
+            0.100*exp(-200* ((x-0.12).^2 +   (y-0.32).^2))  + 0.110*exp(-1000*(  (x+0.152).^2 + (y+0.24).^2)) +
+            0.100*exp(-200* ((x+0.12).^2 +   (y+0.32).^2))  + 0.100*exp(-1000*(  (x-0.140).^2 + (y-0.24).^2)) +
+            0.100*exp(-200* ((x-0.12).^2 +   (y+0.22).^2))  + 0.104*exp(-1000*(  (x+0.340).^2 + (y+0.35).^2)) +
+            0.200*exp(-1000*((x-0.42).^2 + 2*(y+0.42).^2))  + 0.101*exp(-1000*(  (x+0.140).^2 + (y+0.04).^2)) +
+            0.230*exp(-2000*((x-0.25).^2 + 3*(y+0.00).^2))  + 0.203*exp(-1000*(  (x-0.340).^2 + (y-0.31).^2)) +
+            0.250*exp(-200* ((x+0.21).^2 +   (y+0.21).^2))  + 0.205*exp(-1000*(2*(x-0.101).^2 + (y+0.2).^2)) +
+            0.037*exp(-200*( (x+0.23).^2 +   (y-0.30).^2))  + 0.208*exp(-1000*(  (x-0.274).^2 + (y-0.24).^2)) +
+            0.050*exp(-200*( (x-0.08).^2 +   (y+0.23).^2))  + 0.233*exp(-100* (  (x-0.204).^2 + (y-0.24).^2)) +
+            0.021*exp(-1000*((x-0.37).^2 + 2*(y-0.29).^2))  + 0.299*exp(-1000*(  (x-0.124).^2 + (y+0.04).^2)) +
+            0.140*exp(-2000*((x-0.36).^2 + 3*(y+0.10).^2))  + 0.105*exp(-100 *(  (x-0.234).^2 + (y+0.14).^2)) +
+            0.048*exp(-200*( (x+0.32).^2 +   (y+0.35).^2))  + 0.258*exp(-1000*(2*(x-0.051).^2 + (y-0.2).^2)) +
+            0.037*exp(-200*( (x-0.23).^2 +   (y+0.30).^2))  + 0.208*exp(-1000*(  (x+0.274).^2 + (y+0.24).^2)) +
+            0.050*exp(-200*( (x+0.08).^2 +   (y-0.23).^2))  + 0.233*exp(-100* (  (x+0.204).^2 + (y+0.24).^2)) +
+            0.021*exp(-1000*((x+0.27).^2 + 2*(y+0.29).^2))  + 0.199*exp(-1000*(  (x+0.124).^2 + (y-0.04).^2)) +
+            0.140*exp(-2000*((x+0.26).^2 + 3*(y-0.10).^2))  + 0.105*exp(-100* (  (x+0.234).^2 + (y-0.34).^2)) +
+            0.048*exp(-200*( (x-0.20).^2 +   (y-0.39).^2))  + 0.258*exp(-1000*(2*(x+0.051).^2 + (y+0.2).^2)) ).*(abs(x).<0.48).*(abs(y).<0.48);
 
-nu1(x,y)=  (phi(x,y).>0.05).*(-1.5*(phi(x,y)-0.05) - g(x,y).*cos(0.9*y))  ;
 
-nu(x,y) = -nu1(3*x,3*y); # sign is important the convention with respect to Leslie paper is different
 
 nuT(x,y)= nu(y,x)
 
@@ -106,7 +112,6 @@ idx1 = SubDomLimits[1:end-1]
 idxn = SubDomLimits[2:end]-1
 
 #npml = round(Integer, ((m-1)/nSubdomains)/2)
-npml = 10
 T = speye(N);
 
 index = 1:N;
@@ -154,8 +159,7 @@ for ii = 1:length(theta)
 end
 
 
-
-println("Solving the plasma model wavespeed")
+println("Solving the positive perturbation wavespeed")
 println("Frequency is ", k/(2*pi))
 println("Number of discretization points is ", 1/h)
 println("Number of Subdomains is ", nSubdomains)
@@ -163,6 +167,7 @@ println("average time ", time/length(theta))
 println("npml points  ", npml )
 println("average number of iterations ", nit/length(theta))
 println("maximum number of inner iterations ", maxInnerIter )
+
 
 
 end

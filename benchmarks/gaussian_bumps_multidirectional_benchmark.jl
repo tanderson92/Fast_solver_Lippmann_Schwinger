@@ -201,12 +201,16 @@ for ii = 1:length(theta)
 end
 
 
+
+println("Solving the gaussian bumps wavespeed")
 println("Frequency is ", k/(2*pi))
 println("Number of discretization points is ", 1/h)
 println("Number of Subdomains is ", nSubdomains)
 println("average time ", time/length(theta))
+println("npml points  ", npml )
 println("average number of iterations ", nit/length(theta))
 println("maximum number of inner iterations ", maxInnerIter )
+
 
 
 end
