@@ -60,8 +60,9 @@ type doublePreconditioner
     doubleGSPreconditioner
     mkl_sparseBlas
     maxIter::Int64  # maximum number of inner iterations
-    function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false,  maxIter = 20)
-        new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas, maxIter) # don't know if it's the best answer
+    tol::Float64
+    function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false,  maxIter = 20, tol = 1e-1)
+        new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas, maxIter,tol) # don't know if it's the best answer
     end
 
 end
@@ -154,8 +155,16 @@ function \(M::doublePreconditioner, b::Array{Complex128,1})
         else
             x0 =  M.As*b;
         end
-        info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = M.maxIter, maxiter = 1, tol = 1e-2)
-        println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
+        if M.maxIter == 1
+            # gmres is only a step of iterative refinement
+            y = M.doubleGSPreconditioner\x0
+            err = x0 - M.Msp*x0
+            y += M.doubleGSPreconditioner\err
+        else
+            # otherwise we can just use GMRES (the overhead is enough)
+            info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = M.maxIter, maxiter = 1, tol = 1e-2)
+            println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
+        end
     else
         y = M.doubleGSPreconditioner\(M.As*b)
     end

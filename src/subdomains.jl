@@ -46,8 +46,9 @@ type Subdomain
 
 
         # We add the complex shift in here
+        # We need to figure out the best constant, it should scale as k
         filtershift(a1,a2,y) = (y.<=a1).*( (y-a1).^2) +  (y.>=a2).*( (y-a2).^2);
-        shift = k
+        shift = 2*k
         #println("using shift = k")
         # defining the speed with the correct cut-off
         if ind1 == 1
@@ -165,10 +166,9 @@ function solve(subdomain::Subdomain, f::Array{Complex128,2})
         end
         # if the linear solvers is MKL Pardiso
         if subdomain.solvertype == "MKLPARDISO"
-            println("multiple right hand solve not implemented in Pardiso yet")
-            # set_phase(subdomain.Hinv, 33)
-            # u = zeros(Complex128,length(f))
-            # pardiso(subdomain.Hinv, u, subdomain.H, f)
+            set_phase(subdomain.Hinv, 33)
+            u = zeros(f)
+            pardiso(subdomain.Hinv, u, subdomain.H, f)
         end
 
         return u
@@ -873,7 +873,7 @@ function generatePermutationMatrix(n::Int64,nSubs::Int64 )
     E = speye(4*(nSubs-1));
     p_aux   = kron(linspace(1, 2*(nSubs-1)-1, nSubs-1 ).', [1 1]) + kron(ones(1,nSubs-1), [0 2*(nSubs-1) ]);
     p_aux_2 = kron(linspace(2, 2*(nSubs-1) , nSubs-1 ).', [1 1]) + kron(ones(1,nSubs-1), [2*(nSubs-1) 0]);
-    p = E[vec(hcat(int(p_aux), int(p_aux_2))),: ];
+    p = E[vec(hcat(round(Int64,p_aux), round(Int64,p_aux_2))),: ];
     P = kron(p, speye(nSurf));
     return P;
 end
