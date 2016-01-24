@@ -29,7 +29,7 @@ for ll = 1:length(H)
     h = H[ll]
 
     nSubdomains = Subs[ll];
-
+    npml = NPML[ll]
 
 
 k = (1/h)
@@ -152,8 +152,6 @@ idx1 = SubDomLimits[1:end-1]
 # index in y of the last row of each subdomains
 idxn = SubDomLimits[2:end]-1
 
-#npml = round(Integer, ((m-1)/nSubdomains)/2)
-npml = 10
 T = speye(N);
 
 index = 1:N;
