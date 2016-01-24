@@ -61,7 +61,7 @@ type doublePreconditioner
     mkl_sparseBlas
     maxIter::Int64  # maximum number of inner iterations
     tol::Float64
-    function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false,  maxIter = 20, tol = 1e-1)
+    function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false,  maxIter = 20, tol = 1e-2)
         new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas, maxIter,tol) # don't know if it's the best answer
     end
 
@@ -146,7 +146,7 @@ function \(M::doublePreconditioner, b::Array{Complex128,1})
 
     if M.maxIter != 0
         y = zeros(b)
-        # small
+        # small if block to use sparse MKL
         if M.mkl_sparseBlas
             x0 = zeros(b);
             beta = Complex128(1+0im)
@@ -162,7 +162,7 @@ function \(M::doublePreconditioner, b::Array{Complex128,1})
             y += M.doubleGSPreconditioner\err
         else
             # otherwise we can just use GMRES (the overhead is enough)
-            info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = M.maxIter, maxiter = 1, tol = 1e-2)
+            info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = M.maxIter, maxiter = 1, tol = M.tol)
             println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
         end
     else
