@@ -143,8 +143,7 @@ time = 0
 nit = 0
 for ii = 1:length(theta)
 
-    u_inc = exp(k*im*(X*cos(theta) + Y*sin(theta)));
-    u_inc = exp(k*im*X);
+    u_inc = exp(k*im*(X*cos(theta[ii]) + Y*sin(theta[ii])));
     rhs = -(fastconv*u_inc - u_inc);
 
     u = zeros(Complex128,N);
