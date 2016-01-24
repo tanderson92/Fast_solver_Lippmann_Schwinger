@@ -17,7 +17,7 @@ type doubleGSPreconditioner
         N = n*n; # we suppose that the domain is squared
         T = speye(N);
         index = 1:N;
-        index = (reshape(index, n,m).')[:];
+        index = (reshape(index, n,n).')[:];
         T = T[index,:];
         nSubs = length(subDomains1)
         new(n,nSubs, subDomains1,subDomains2,Msp, T,T.', tol,precondtype) # don't know if it's the best answer
