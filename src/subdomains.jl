@@ -155,6 +155,30 @@ function solve(subdomain::Subdomain, f::Array{Complex128,1})
     end
 end
 
+function solve(subdomain::Subdomain, f::Array{Complex128,2})
+    # u = solve(subdomain::Subdomain, f)
+    # function that solves the system Hu=f in the subdomain
+    # check size
+    if (size(f)[1] == subdomain.n*subdomain.m)
+        if subdomain.solvertype == "UMFPACK"
+            u = subdomain.Hinv\f;
+        end
+        # if the linear solvers is MKL Pardiso
+        if subdomain.solvertype == "MKLPARDISO"
+            println("multiple right hand solve not implemented in Pardiso yet")
+            # set_phase(subdomain.Hinv, 33)
+            # u = zeros(Complex128,length(f))
+            # pardiso(subdomain.Hinv, u, subdomain.H, f)
+        end
+
+        return u
+    else
+        print("The dimensions do not match \n");
+        return 0
+    end
+end
+
+
 function extractBoundaryData(subdomain::Subdomain, u)
     # Function to extract the boundary data from a solution u
     # input   subdomain: subdomain associated to the solution
@@ -174,7 +198,8 @@ function extractBoundaryData(subdomain::Subdomain, u)
 end
 
 
-function applyBlockOperator(subdomain::Subdomain,v0,v1,vN,vNp)
+function applyBlockOperator(subdomain::Subdomain,v0::Array{Complex128,1},v1::Array{Complex128,1},
+                            vN::Array{Complex128,1},vNp::Array{Complex128,1})
     # function to apply the local matricial operator to the interface data
     # and we sample it at the interface
     # allocating the source
@@ -200,6 +225,40 @@ function applyBlockOperator(subdomain::Subdomain,v0,v1,vN,vNp)
     return (u0,u1,uN,uNp)
 
 end
+
+# version of the block operator to act for multiple right-hand side
+function applyBlockOperator(subdomain::Subdomain, v0::Array{Complex128,2},v1::Array{Complex128,2},
+                            vN::Array{Complex128,2},vNp::Array{Complex128,2})
+    # function to apply the local matricial operator to the interface data
+    # and we sample it at the interface
+    nrhs =  size(v0)[2]
+    # allocating the source
+    f = zeros(Complex{Float64},subdomain.n*subdomain.m,nrhs);
+    # filling the source with the correct single and double layer potentials
+    # TO DO: put the correct operators in here (we need to multiply the traces)
+    # by the correct weights
+    for ii = 1:nrhs
+        if length(subdomain.ind_1)>0
+            f[subdomain.ind_1,ii ] = -subdomain.H[subdomain.ind_1,subdomain.ind_0]*v0[:,ii];
+            f[subdomain.ind_0,ii ] =  subdomain.H[subdomain.ind_0,subdomain.ind_1]*v1[:,ii];
+        end
+        if length(subdomain.ind_n)>0
+            f[subdomain.ind_np,ii] =  subdomain.H[subdomain.ind_np,subdomain.ind_n]*vN[:,ii];
+            f[subdomain.ind_n ,ii] = -subdomain.H[subdomain.ind_n,subdomain.ind_np]*vNp[:,ii];
+        end
+    end
+    u = solve(subdomain, f);
+
+    U   = reshape(u,subdomain.n*subdomain.m, nrhs)
+    u0  = U[subdomain.ind_0 ,:];
+    u1  = U[subdomain.ind_1 ,:];
+    uN  = U[subdomain.ind_n ,:];
+    uNp = U[subdomain.ind_np,:];
+
+    return (u0,u1,uN,uNp)
+
+end
+
 
 
 function solveLocal(subDomains, source::Array{Complex128,1})
@@ -385,7 +444,7 @@ end
 
 function vectorizePolarizedBdyDataRHS(subDomains,uBdyData)
     # function to take the output of extract Boundary data and put it in vectorized form
-    
+
     nSubs = length(subDomains);
     n = subDomains[1].n
 
@@ -736,7 +795,7 @@ function applyDinvUp(subDomains, uGamma)
         Dinvu[nInd+ (2*ii-2)*nSurf]  = vec(v0) - vec(u0);
         Dinvu[nInd+ (2*ii-1)*nSurf]  = vec(v1) - vec(u1);
 
-        v0   = Dinvu[nInd+ (2*ii-2)*nSurf] ;
+        v0  = Dinvu[nInd+ (2*ii-2)*nSurf] ;
         v1  = Dinvu[nInd+ (2*ii-1)*nSurf];
     end
 
@@ -899,6 +958,7 @@ function applyMMOpt(subDomains, uGamma)
     nSurf = subDomains[1].n
     nInd = 1:nSurf;
 
+    #TODO modify this functio in order to solve the three rhs in one shot
     # applying this has to be done in parallel applying RemoteRefs
     v1 = [ applyBlockOperator(subDomains[ii],u0Down[ii]         ,u1Down[ii]         ,
                               uNUp[ii]+uNDown[ii],uNpUp[ii]+uNpDown[ii]) for ii = 1:nLayer ];
@@ -938,99 +998,64 @@ end
 
 
 
-
-function applyMdownOpt(subDomains, uGamma)
-    # function to apply M to uGamma
+# Function for the application of the different blocks of the integral system
+# This is an optimized version that uses only 4 solves per layer instead of 8
+# moreover, it allocates less memory
+function applyMMOptUmf(subDomains, uGamma)
+    # function to apply M to uGamma using an application via multiple right-hand sides
     # input subDomains : an array of subdomains
     #       uGamma   : data on the boundaries in vector form
 
+    uDown = uGamma[1:round(Integer, end/2)]
+    uUp   = uGamma[1+round(Integer, end/2):end]
     # convert uGamma in a suitable vector to be applied
-    (u0,u1,uN,uNp) = devectorizeBdyData(subDomains, uGamma);
+    (u0Down,u1Down,uNDown,uNpDown) = devectorizeBdyData(subDomains, uDown);
+    (u0Up  ,u1Up  ,uNUp  ,uNpUp)   = devectorizeBdyData(subDomains, uUp);
 
     # obtaining the number of layers
     nLayer = size(subDomains)[1];
     nSurf = subDomains[1].n
     nInd = 1:nSurf;
 
-    # applying the local solves (for loop)
-    v1 = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],  uN[ii],  uNp[ii]) for ii = 1:nLayer ];
-    vN = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],0*uN[ii],0*uNp[ii]) for ii = 1:nLayer ];
+    # #TODO modify this functio in order to solve the three rhs in one shot
+    # # applying this has to be done in parallel applying RemoteRefs
+    # u0  = hcat(u0Down[ii], u0Down[ii]+u0Up[ii], u0Down[ii], u0Up[ii]+u0Down[ii])
+    # u1  = hcat(u1Down[ii], u1Down[ii]+u1Up[ii], u1Down[ii], u1Down[ii]+u1Up[ii])
+    # uN  = hcat(uNUp[ii]+uNDown[ii], uNUp[ii], uNUp[ii]+uNDown[ii], uNUp[ii])
+    # uNp = hcat(uNpUp[ii]+uNpDown[ii], uNpUp[ii], uNpUp[ii]+uNpDown[ii], uNpUp[ii] )
+
+    # only one solve
+    V = [ applyBlockOperator(subDomains[ii],
+            hcat(u0Down[ii], u0Down[ii]+u0Up[ii], u0Down[ii], u0Up[ii]+u0Down[ii]),
+            hcat(u1Down[ii], u1Down[ii]+u1Up[ii], u1Down[ii], u1Down[ii]+u1Up[ii]),
+            hcat(uNUp[ii]+uNDown[ii], uNUp[ii], uNUp[ii]+uNDown[ii], uNUp[ii]),
+            hcat(uNpUp[ii]+uNpDown[ii], uNpUp[ii], uNpUp[ii]+uNpDown[ii], uNpUp[ii] )) for ii = 1:nLayer ];
+
+
+    Mu1 = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
+
+    Mu1[nInd] = - uNUp[1] - uNDown[1] + vec(V[1][3][:,2]);
+
+    for ii=1:nLayer-2
+        Mu1[nInd + (2*ii-1)*nSurf] = - u1Up[ii+1] - u1Down[ii+1] + vec(V[ii+1][2][:,1]);
+        Mu1[nInd + (2*ii  )*nSurf] = - uNUp[ii+1] - uNDown[ii+1] + vec(V[ii+1][3][:,2]);
+    end
+    ii = nLayer-1;
+    Mu1[nInd + (2*ii-1)*nSurf] = - u1Up[ii+1] - u1Down[ii+1] + vec(V[ii+1][2][:,1]) ;
+
 
     Mu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
 
-    Mu[nInd] =  - uN[1];
+
+    Mu[nInd] =  vec(V[1][4][:,4])- uNpDown[1] ;
 
     for ii=1:nLayer-2
-        Mu[nInd + (2*ii-1)*nSurf] = - u1[ii+1] + vec(v1[ii+1][2]);
-        Mu[nInd + (2*ii  )*nSurf] = - uN[ii+1] + vec(vN[ii+1][3]);
+        Mu[nInd + (2*ii-1)*nSurf] = - u0Up[ii+1] + vec(V[ii+1][1][:,3]);
+        Mu[nInd + (2*ii  )*nSurf] = - uNpDown[ii+1] + vec(V[ii+1][4][:,4]);
     end
     ii = nLayer-1;
-    Mu[nInd + (2*ii-1)*nSurf] = - u1[ii+1] + vec(v1[ii+1][2]);
+    Mu[nInd + (2*ii-1)*nSurf] = -  u0Up[ii+1] + vec(V[ii+1][1][:,3])
 
-    return Mu[:]
-end
+    return vcat(Mu1,Mu)
 
-function applyM0upOpt(subDomains, uGamma)
-    # function to apply M to uGamma
-    # input subDomains : an array of subdomains
-    #       uGamma   : data on the boundaries in vector form
-
-    # convert uGamma in a suitable vector to be applied
-    (u0,u1,uN,uNp) = devectorizeBdyData(subDomains, uGamma);
-
-    # obtaining the number of layers
-    nLayer = size(subDomains)[1];
-    nSurf = subDomains[1].n
-    nInd = 1:nSurf;
-
-    # applying
-    # remember  v[ii][1] = v0[ii], v[ii][2] = v1[ii],
-    #           v[ii][3] = vN[ii], v[ii][4] = vNp[ii]
-    v1 = [ applyBlockOperator(subDomains[ii],0*u0[ii],0*u1[ii],uN[ii],uNp[ii]) for ii = 1:nLayer ];
-    vN = [ applyBlockOperator(subDomains[ii],  u0[ii],  u1[ii],uN[ii],uNp[ii]) for ii = 1:nLayer ];
-
-    Mu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
-
-    Mu[nInd] =  vec(vN[1][4]);
-
-    for ii=1:nLayer-2
-        Mu[nInd + (2*ii-1)*nSurf] = - u0[ii+1] + vec(v1[ii+1][1]);
-        Mu[nInd + (2*ii  )*nSurf] =            + vec(vN[ii+1][4]);
-    end
-    ii = nLayer-1;
-    Mu[nInd + (2*ii-1)*nSurf] = -  u0[ii+1] #+ vec(v1[ii+1][1]); # this last one has to be zero
-
-    return Mu[:]
-
-end
-
-function applyM0downOpt(subDomains, uGamma)
-    # function to apply M to uGamma
-    # input subDomains : an array of subdomains
-    #       uGamma   : data on the boundaries in vector form
-
-    # convert uGamma in a suitable vector to be applied
-    (u0,u1,uN,uNp) = devectorizeBdyData(subDomains, uGamma);
-
-    # obtaining the number of layers
-    nLayer = size(subDomains)[1];
-    nSurf = subDomains[1].n
-    nInd = 1:nSurf;
-
-    # applying the local solves (for loop)
-    v1 = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],  uN[ii],  uNp[ii]) for ii = 1:nLayer ];
-    vN = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],0*uN[ii],0*uNp[ii]) for ii = 1:nLayer ];
-
-    Mu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
-
-    Mu[nInd] =  - uNp[1];
-
-    for ii=1:nLayer-2
-        Mu[nInd + (2*ii-1)*nSurf] =             + vec(v1[ii+1][1]);
-        Mu[nInd + (2*ii  )*nSurf] = - uNp[ii+1] + vec(vN[ii+1][4]);
-    end
-    ii = nLayer-1;
-    Mu[nInd + (2*ii-1)*nSurf] =   vec(v1[ii+1][1]);
-
-    return Mu[:]
 end

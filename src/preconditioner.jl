@@ -59,7 +59,7 @@ type doublePreconditioner
     Msp::SparseMatrixCSC{Complex{Float64},Int64}
     doubleGSPreconditioner
     mkl_sparseBlas
-    maxIter::Int64  # maximum number of inner iterations 
+    maxIter::Int64  # maximum number of inner iterations
     function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false,  maxIter = 20)
         new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas, maxIter) # don't know if it's the best answer
     end
@@ -128,7 +128,7 @@ function \(M::PolarizedTracesPreconditioner, b::Array{Complex128,1})
     fPol = -vectorizePolarizedBdyDataRHS(M.subDomains, f);
     uPol = zeros(fPol)
 
-    info = gmres!(uPol,x->(applyMMOpt(M.subDomains, x)), fPol, M.IntegralPreconditioner, tol = M.tol)
+    info = gmres!(uPol,x->(applyMMOptUmf(M.subDomains, x)), fPol, M.IntegralPreconditioner, tol = M.tol)
 
     println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
     u = uPol[1:round(Integer, end/2)] + uPol[round(Integer, end/2)+1:end]

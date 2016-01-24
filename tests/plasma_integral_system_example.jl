@@ -9,7 +9,7 @@
 using PyPlot
 using Devectorize
 using IterativeSolvers
-using Pardiso
+#using Pardiso
 
 include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
@@ -18,7 +18,7 @@ include("../src/preconditioner.jl")
 include("../src/integral_preconditioner.jl")
 
 #Defining Omega
-h = 0.001
+h = 0.00125
 k = (1/h)
 
 # setting the correct number of threads for FFTW and
@@ -39,7 +39,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 20;
+nSubdomains = 16;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
@@ -56,7 +56,7 @@ phi(x,y) = 1 - (x-0.05*(1-x.^2)).^2 - C*((1 + 0.3x).^2).*y.^2
 
 aa = [0.45, 0.196, 0.51, 0.195, 0.63 ];
 xI = [0.4 , 0.54 , -0.14, -0.5, 0.18];
-yI = [0   , -0.28, 0.70, -0.01, 0.8];  
+yI = [0   , -0.28, 0.70, -0.01, 0.8];
 
 g(x,y) = aa[1]*exp(-((x-xI[1]).^2 + (y-yI[1]).^2)/0.01 ) +
          aa[2]*exp(-((x-xI[2]).^2 + (y-yI[2]).^2)/0.01 ) +
@@ -64,7 +64,7 @@ g(x,y) = aa[1]*exp(-((x-xI[1]).^2 + (y-yI[1]).^2)/0.01 ) +
          aa[4]*exp(-((x-xI[4]).^2 + (y-yI[4]).^2)/0.01 ) +
          aa[5]*exp(-((x-xI[5]).^2 + (y-yI[5]).^2)/0.01 ) ;
 
-nu1(x,y)=  (phi(x,y).>0.05).*(-1.5*(phi(x,y)-0.05) - g(x,y).*cos(0.9*y))  ;  
+nu1(x,y)=  (phi(x,y).>0.05).*(-1.5*(phi(x,y)-0.05) - g(x,y).*cos(0.9*y))  ;
 
 nu(x,y) = -nu1(3*x,3*y); # sign is important the convention with respect to Leslie paper is different
 
@@ -95,15 +95,16 @@ idx1 = SubDomLimits[1:end-1]
 idxn = SubDomLimits[2:end]-1
 
 #npml = round(Integer, ((m-1)/nSubdomains)/2)
-npml = 14
+npml = 10
 
-SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], npml, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
+#SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], npml, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
+SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii] , idxn[ii], npml, h, nu, k) for ii = 1:nSubdomains];
 
 
-# this step is a hack to avoid building new vectors in int32 every time
-for ii = 1:nSubdomains
-	convert64_32!(SubArray[ii])
-end
+# # this step is a hack to avoid building new vectors in int32 every time
+# for ii = 1:nSubdomains
+# 	convert64_32!(SubArray[ii])
+# end
 
 tic();
 for ii=1:nSubdomains
@@ -111,7 +112,7 @@ for ii=1:nSubdomains
 end
 println("Time for the factorization ", toc())
 
-Precond = PolarizedTracesPreconditioner(As, SubArray);
+Precond = PolarizedTracesPreconditioner(As, SubArray, nIt =2);
 
 # building the RHS from the incident field
 # theta = rand(1)[1]*2*pi
