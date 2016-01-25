@@ -346,7 +346,7 @@ function extractRHS(subDomains,source::Array{Complex128,1})
 
     uLocalArray = solveLocal(subDomains, source)
 
-    return extractFullBoundaryData(SubArray, uLocalArray)
+    return extractFullBoundaryData(subDomains, uLocalArray)
 end
 
 
@@ -359,7 +359,7 @@ function devectorizeBdyData(subArray, uGamma)
     vNp = [];
     # obtaining the number of layers
     nLayer = size(subArray)[1];
-    nSurf = SubArray[1].n;
+    nSurf = subArray[1].n;
     nInd = 1:nSurf;
 
     for ii = 1:nLayer
@@ -392,7 +392,7 @@ function devectorizeBdyDataContiguous(subArray, uGamma)
 
     # obtaining the number of layers
     nLayer = size(subArray)[1];
-    nSurf = SubArray[1].n;
+    nSurf = subArray[1].n;
     nInd = 1:nSurf;
 
     v0  = zeros(Complex128, nSurf*nLayer);
@@ -409,16 +409,16 @@ function devectorizeBdyDataContiguous(subArray, uGamma)
             vNp[nInd] = uGamma[nInd+nSurf];
         elseif ii == (nLayer)
             #extract the good traces and put the rest to zero
-            v0[nInd+ (ii-1)*n] =   uGamma[nInd+(2*ii-4)*nSurf];
-            v1[nInd+ (ii-1)*n] =   uGamma[nInd+(2*ii-3)*nSurf];
-            vN[nInd+ (ii-1)*n] =  0*uGamma[nInd+(2*ii-4)*nSurf];
-            vNp[nInd+ (ii-1)*n] = 0*uGamma[nInd+(2*ii-3)*nSurf];
+            v0[nInd+ (ii-1)*nSurf] =   uGamma[nInd+(2*ii-4)*nSurf];
+            v1[nInd+ (ii-1)*nSurf] =   uGamma[nInd+(2*ii-3)*nSurf];
+            vN[nInd+ (ii-1)*nSurf] =  0*uGamma[nInd+(2*ii-4)*nSurf];
+            vNp[nInd+ (ii-1)*nSurf] = 0*uGamma[nInd+(2*ii-3)*nSurf];
         else
             # fill the rest of the arrays with the data
-            v0[nInd+ (ii-1)*n]  =   uGamma[nInd+(2*ii-4)*nSurf];
-            v1[nInd+ (ii-1)*n]  =   uGamma[nInd+(2*ii-3)*nSurf];
-            vN[nInd+ (ii-1)*n]  =   uGamma[nInd+(2*ii-2)*nSurf];
-            vNp[nInd+ (ii-1)*n] =   uGamma[nInd+(2*ii-1)*nSurf];
+            v0[nInd+ (ii-1)*nSurf]  =   uGamma[nInd+(2*ii-4)*nSurf];
+            v1[nInd+ (ii-1)*nSurf]  =   uGamma[nInd+(2*ii-3)*nSurf];
+            vN[nInd+ (ii-1)*nSurf]  =   uGamma[nInd+(2*ii-2)*nSurf];
+            vNp[nInd+ (ii-1)*nSurf] =   uGamma[nInd+(2*ii-1)*nSurf];
         end
     end
     return (v0,v1,vN,vNp)
@@ -850,7 +850,7 @@ function applyL(subDomains, uGamma)
     nInd = 1:nSurf;
 
     # applying the local solves (for loop)
-    v1 = { applyBlockOperator(subDomains[ii],u0[ii],u1[ii],  uN[ii],  uNp[ii]) for ii = 1:nLayer };
+    v1 = [ applyBlockOperator(subDomains[ii],u0[ii],u1[ii],  uN[ii],  uNp[ii]) for ii = 1:nLayer ];
 
     Lu = zeros(Complex{Float64},2*(nLayer-1)*nSurf);
 

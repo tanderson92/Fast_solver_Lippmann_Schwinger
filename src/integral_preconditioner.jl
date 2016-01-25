@@ -71,7 +71,7 @@ function PrecondGaussSeidel(subArray, v::Array{Complex128,1}, nit; verbose=false
 
         # f - Ru^{n-1}
         if norm(u)  != 0
-            udownaux = v[1:round(Integer,end/2)] - applyU(subArray, uup);
+            udownaux = v[1:round(Integer,end/2)]       - applyU(subArray, uup);
         else
             udownaux = v[1:round(Integer,end/2)]
         end

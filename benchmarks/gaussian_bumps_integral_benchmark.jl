@@ -15,14 +15,22 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
+include("../src/integral_preconditioner.jl")
+
+
 
 #Defining Omega
-H = [ 0.005, 0.0025, 0.00125, 0.000625]
-Subs = [ 4,8,16,32]
+# H = [ 0.005, 0.0025, 0.00125, 0.000625]
+# Subs = [ 4,8,16,32]
 
-NPML = [ 10, 12, 14, 16]
+# NPML = [ 10, 12, 14, 16]
 
-maxInnerIter = 2
+H = [ 0.005, 0.0025]
+Subs = [ 4,8]
+
+NPML = [ 10, 12]
+
+tolerance = [ 1e-2, 1e-3, 1e-4]
 
 for ll = 1:length(H)
 
@@ -181,7 +189,7 @@ for ii = 1:length(theta)
 
     u = zeros(Complex128,N);
     tic();
-    info = gmres!(u, fastconv, rhs, Precond)
+    info = gmres!(u, fastconv, rhs, Precond, tol =1e-10)
     time += toc();
     nit+=countnz(info[2].residuals[:])
 end
@@ -195,7 +203,6 @@ println("Number of Subdomains is ", nSubdomains)
 println("average time ", time/length(theta))
 println("npml points  ", npml )
 println("average number of iterations ", nit/length(theta))
-println("maximum number of inner iterations ", maxInnerIter )
 
 
 
