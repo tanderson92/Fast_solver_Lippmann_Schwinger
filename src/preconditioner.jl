@@ -1,5 +1,4 @@
-# We add the preconditioner (Gauss Seidel type in this file)
-# we need to be sure to be having just a pointer
+# File containing all the preconditioners
 
 
 type doubleGSPreconditioner
@@ -133,6 +132,7 @@ function \(M::PolarizedTracesPreconditioner, b::Array{Complex128,1})
 
     println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
     u = uPol[1:round(Integer, end/2)] + uPol[round(Integer, end/2)+1:end]
+    
     (v0,v1,vn,vnp) = devectorizeBdyDataContiguous(M.subDomains, u)
 
     U = reconstruction(M.subDomains, M.As*b, v0, v1, vn, vnp);
