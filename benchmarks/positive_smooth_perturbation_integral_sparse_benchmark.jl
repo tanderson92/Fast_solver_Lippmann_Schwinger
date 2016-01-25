@@ -15,6 +15,7 @@ include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
+include("../src/integral_preconditioner.jl")
 
 #Defining Omega
 H = [ 0.005, 0.0025, 0.002, 0.00125, 0.001, 0.0008, 0.0007142857142857143, 0.000625, 0.0005]
@@ -62,7 +63,7 @@ for ll = 1:length(H)
     
     
     
-    nu(x,y)=    ( 0.200*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-200*((x - 0.1).^2 + (y+0.1).^2)) +
+    nu(x,y)=    -( 0.200*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-200*((x - 0.1).^2 + (y+0.1).^2)) +
                 0.200*exp(-2000*((x+0.11).^2 +   y.^2))         + 0.250*exp(-1000*(  (x-0.112).^2 + (y+0.1).^2)) +
                 0.100*exp(-200* ((x+0.31).^2 +   (y+0.30).^2))  + 0.120*exp(-1000*(  (x-0.128).^2 + (y+0.2).^2)) +
                 0.100*exp(-200* ((x-0.12).^2 +   (y-0.32).^2))  + 0.110*exp(-1000*(  (x+0.152).^2 + (y+0.24).^2)) +
@@ -120,25 +121,24 @@ for ll = 1:length(H)
     MapproxspT =  T*Mapproxsp*T.';
     AGT = T*AG*T.';
     AsT = T*As*T.';
-    SubArray1 = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii],idxn[ii], npml, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
-    SubArray2 = [ Subdomain(AsT,AGT,MapproxspT,x,y, idx1[ii],idxn[ii], npml, h, nuT, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
+    SubArray = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii],idxn[ii], npml, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
+
     
     
     # this step is a hack to avoid building new vectors in int32 every time
     for ii = 1:nSubdomains
-        convert64_32!(SubArray1[ii])
-          convert64_32!(SubArray2[ii])
+        convert64_32!(SubArray[ii])
+        
     end
     
     tic();
     for ii=1:nSubdomains
-        factorize!(SubArray1[ii])
-          factorize!(SubArray2[ii])
+        factorize!(SubArray[ii])
+        
     end
     println("Time for the factorization ", toc())
     
-    Precond = doubleGSPreconditioner(SubArray1, SubArray2, Mapproxsp)
-    
+    Precond = PolarizedTracesPreconditioner(As, SubArray, nIt = 1 ,tol = 1e-6);    
     # we build a set of different incident waves
     
     theta = collect(1:0.3:2*pi)
@@ -148,23 +148,21 @@ for ll = 1:length(H)
     
         u_inc = exp(k*im*(X*cos(theta[ii]) + Y*sin(theta[ii])));
         rhs = -(fastconv*u_inc - u_inc);
-    
-        u = zeros(Complex128,N);
+        
         tic();
-        info = gmres!(u, Mapproxsp, As*rhs, Precond)
+        u = Precond\rhs
         time += toc();
-        nit+=countnz(info[2].residuals[:])
     end
     
     
-    println("Solving the sparse system with the positive perturbation ")
+    println("Solving the sparse system with the positive perturbation via the method of polarized traces ")
     println("Frequency is ", k/(2*pi))
     println("Number of discretization points is ", 1/h)
     println("Number of Subdomains is ", nSubdomains)
     println("average time ", time/length(theta))
     println("npml points  ", npml )
-    println("average number of iterations ", nit/length(theta))
-    println("maximum number of inner iterations ", maxInnerIter )
+    #println("average number of iterations ", nit/length(theta))
+    #println("maximum number of inner iterations ", maxInnerIter )
 
 
 
