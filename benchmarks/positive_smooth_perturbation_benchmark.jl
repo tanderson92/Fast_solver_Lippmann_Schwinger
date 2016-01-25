@@ -1,8 +1,4 @@
-# small script to test how to perform the domain decomposition
-# we try to compute fast solution without tampering with A directly,
-# in this file we add the possibility to use Sparse MKL for the matrix
-# vector multiplication
-
+# benchmark for the negative perturbation
 
 # Clean version of the DDM ode
 
@@ -17,52 +13,21 @@ include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
 
 #Defining Omega
-H = [ 0.005, 0.0025, 0.00125, 0.000625]
-Subs = [ 4,8,16,32]
+# H = [ 0.005, 0.002,0.0025, 0.00125, 0.001 0.000625]
+# Subs = [ 4,8,10, 16,20,32]
 
-NPML = [ 10, 12, 14, 16]
+# NPML = [ 10, 12, 14, 16]
 
-maxInnerIter = 2
-
-for ll = 1:length(H)
-
-    h = H[ll]
-
-    nSubdomains = Subs[ll];
-
-npml = NPML[ll]
-
-k = (1/h)
-# setting the correct number of threads for FFTW and
-# BLAS, this can be further
-FFTW.set_num_threads(16)
-blas_set_num_threads(16)
-
-println("Frequency is ", k/(2*pi))
-println("Number of discretization points is ", 1/h)
-
-# size of box
-a  = 1
-x = -a/2:h:a/2
-y = -a/2:h:a/2
-n = length(x)
-m = length(y)
-N = n*m
-X = repmat(x, 1, m)[:]
-Y = repmat(y', n,1)[:]
+H = [ 0.005, 0.002, 0.0025, 0.00125, 0.001, 0.0008, 0.0007142857142857143, 0.000625, 0.0005]
+Subs = [  4,  8, 10, 16, 20, 25, 28, 32, 40]
+NPML = [ 15, 15, 15, 15, 15, 15, 15, 15, 15]
 
 
-println("Number of Subdomains is ", nSubdomains)
-# we solve \triangle u + k^2(1 + nu(x))u = 0
-# in particular we compute the scattering problem
+maxIter = [ 2 3 4 20]
 
+tolerance = [1e-2, 1e-3, 1e-4]
 
-# we extract from a "tabulated" dictionary
-# the good modification for the quadrature modification
-(ppw,D) = referenceValsTrapRule();
-D0 = D[1];
-
-
+## Definin the wave speed 
 
 nu(x,y)=    -( 0.200*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-200*((x - 0.1).^2 + (y+0.1).^2)) +
             0.200*exp(-2000*((x+0.11).^2 +   y.^2))         + 0.250*exp(-1000*(  (x-0.112).^2 + (y+0.1).^2)) +
@@ -88,86 +53,134 @@ nu(x,y)=    -( 0.200*exp(-20*(x.^2 + y.^2))  + 0.25*exp(-200*((x - 0.1).^2 + (y+
 
 nuT(x,y)= nu(y,x)
 
-Ge = buildGConv(x,y,h,n,m,D0,k);
-GFFT = fft(Ge);
 
-fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
+# for kk = 1:length(tolerance)
+for ll = 1:length(H)
 
-println("Building the A sparse")
-@time As = buildSparseA(k,X,Y,D0, n ,m);
+    h = H[ll]
 
-println("Building A*G in sparse format")
-@time AG = buildSparseAG(k,X,Y,D0, n ,m);
+    nSubdomains = Subs[ll];
+    npml = NPML[ll]
+    # innerTol = tolerance[kk]
 
-# need to check everything here :S
-
-Mapproxsp = k^2*(AG*spdiagm(nu(X,Y)));
-Mapproxsp = As + Mapproxsp;
-
-# number of interior points for each subdomain
-SubDomLimits = round(Integer, floor(linspace(1,m+1,nSubdomains+1)))
-# index in y. of the first row of each subdomain
-idx1 = SubDomLimits[1:end-1]
-# index in y of the last row of each subdomains
-idxn = SubDomLimits[2:end]-1
-
-#npml = round(Integer, ((m-1)/nSubdomains)/2)
-T = speye(N);
-
-index = 1:N;
-index = (reshape(index, n,m).')[:];
-
-T = T[index,:];
-
-MapproxspT =  T*Mapproxsp*T.';
-AGT = T*AG*T.';
-AsT = T*As*T.';
-SubArray1 = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii],idxn[ii], npml, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
-SubArray2 = [ Subdomain(AsT,AGT,MapproxspT,x,y, idx1[ii],idxn[ii], npml, h, nuT, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
-
-
-# this step is a hack to avoid building new vectors in int32 every time
-for ii = 1:nSubdomains
-    convert64_32!(SubArray1[ii])
-      convert64_32!(SubArray2[ii])
-end
-
-tic();
-for ii=1:nSubdomains
-    factorize!(SubArray1[ii])
-      factorize!(SubArray2[ii])
-end
-println("Time for the factorization ", toc())
-
-doublePrecond = doublePreconditioner(As,Mapproxsp,SubArray1,SubArray2; maxIter = maxInnerIter);
-
-# we build a set of different incident waves
-
-theta = collect(1:0.3:2*pi)
-time = 0
-nit = 0
-for ii = 1:length(theta)
-
-    u_inc = exp(k*im*(X*cos(theta[ii]) + Y*sin(theta[ii])));
-    rhs = -(fastconv*u_inc - u_inc);
-
-    u = zeros(Complex128,N);
+    k = (1/h)
+    # setting the correct number of threads for FFTW and
+    # BLAS, this can be further
+    FFTW.set_num_threads(16)
+    blas_set_num_threads(16)
+    
+    println("Frequency is ", k/(2*pi))
+    println("Number of discretization points is ", 1/h)
+    
+    # size of box
+    a  = 1
+    x = -a/2:h:a/2
+    y = -a/2:h:a/2
+    n = length(x)
+    m = length(y)
+    N = n*m
+    X = repmat(x, 1, m)[:]
+    Y = repmat(y', n,1)[:]
+    
+    
+    println("Number of Subdomains is ", nSubdomains)
+    # we solve \triangle u + k^2(1 + nu(x))u = 0
+    # in particular we compute the scattering problem
+    
+    
+    # we extract from a "tabulated" dictionary
+    # the good modification for the quadrature modification
+    (ppw,D) = referenceValsTrapRule();
+    D0 = D[1];
+    
+   
+    
+    Ge = buildGConv(x,y,h,n,m,D0,k);
+    GFFT = fft(Ge);
+    
+    fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
+    
+    println("Building the A sparse")
+    @time As = buildSparseA(k,X,Y,D0, n ,m);
+    
+    println("Building A*G in sparse format")
+    @time AG = buildSparseAG(k,X,Y,D0, n ,m);
+    
+    # need to check everything here :S
+    
+    Mapproxsp = k^2*(AG*spdiagm(nu(X,Y)));
+    Mapproxsp = As + Mapproxsp;
+    
+    # number of interior points for each subdomain
+    SubDomLimits = round(Integer, floor(linspace(1,m+1,nSubdomains+1)))
+    # index in y. of the first row of each subdomain
+    idx1 = SubDomLimits[1:end-1]
+    # index in y of the last row of each subdomains
+    idxn = SubDomLimits[2:end]-1
+    
+    T = speye(N);
+    
+    index = 1:N;
+    index = (reshape(index, n,m).')[:];
+    
+    T = T[index,:];
+    
+    MapproxspT =  T*Mapproxsp*T.';
+    AGT = T*AG*T.';
+    AsT = T*As*T.';
+    SubArray1 = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii],idxn[ii], npml, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
+    SubArray2 = [ Subdomain(AsT,AGT,MapproxspT,x,y, idx1[ii],idxn[ii], npml, h, nuT, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
+    
+    
+    # this step is a hack to avoid building new vectors in int32 every time
+    for ii = 1:nSubdomains
+        convert64_32!(SubArray1[ii])
+          convert64_32!(SubArray2[ii])
+    end
+    
     tic();
-    info = gmres!(u, fastconv, rhs, doublePrecond)
-    time += toc();
-    nit+=countnz(info[2].residuals[:])
-end
-
-
-println("Solving the positive perturbation wavespeed")
-println("Frequency is ", k/(2*pi))
-println("Number of discretization points is ", 1/h)
-println("Number of Subdomains is ", nSubdomains)
-println("average time ", time/length(theta))
-println("npml points  ", npml )
-println("average number of iterations ", nit/length(theta))
-println("maximum number of inner iterations ", maxInnerIter )
-
-
-
+    for ii=1:nSubdomains
+        factorize!(SubArray1[ii])
+          factorize!(SubArray2[ii])
+    end
+    println("Time for the factorization ", toc())
+    
+    # loop to test for different tolerances
+    for kk = 1:length(tolerance)
+        for jj = 1:length(maxIter)
+            maxInnerIter = maxIter[jj]
+            innerTol = tolerance[kk]
+            doublePrecond = doublePreconditioner(As,Mapproxsp,SubArray1,SubArray2; tol = innerTol, maxIter = maxInnerIter);
+            
+            # we build a set of different incident waves
+            
+            theta = collect(1:0.3:2*pi)
+            time = 0
+            nit = 0
+            for ii = 1:length(theta)
+            
+                u_inc = exp(k*im*(X*cos(theta[ii]) + Y*sin(theta[ii])));
+                rhs = -(fastconv*u_inc - u_inc);
+            
+                u = zeros(Complex128,N);
+                tic();
+                info = gmres!(u, fastconv, rhs, doublePrecond, tol = 1.e-10)
+                time += toc();
+                nit+=countnz(info[2].residuals[:])
+            end
+            
+            
+            
+            println("Solving the positive perturbation wavespeed")
+            println("Frequency is ", k/(2*pi))
+            println("Number of discretization points is ", 1/h)
+            println("Number of Subdomains is ", nSubdomains)
+            println("Inner tolernace is  ", innerTol)
+            println("average time ", time/length(theta))
+            println("npml points  ", npml )
+            println("average number of iterations ", nit/length(theta))
+            println("maximum number of inner iterations ", maxInnerIter )
+        end
+    end
+    
 end

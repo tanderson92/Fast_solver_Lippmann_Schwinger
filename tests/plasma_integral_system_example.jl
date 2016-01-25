@@ -18,7 +18,7 @@ include("../src/preconditioner.jl")
 include("../src/integral_preconditioner.jl")
 
 #Defining Omega
-h = 0.00125
+h = 0.0025
 k = (1/h)
 
 # setting the correct number of threads for FFTW and
@@ -39,7 +39,7 @@ N = n*m
 X = repmat(x, 1, m)[:]
 Y = repmat(y', n,1)[:]
 
-nSubdomains = 16;
+nSubdomains = 8;
 println("Number of Subdomains is ", nSubdomains)
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 # in particular we compute the scattering problem
