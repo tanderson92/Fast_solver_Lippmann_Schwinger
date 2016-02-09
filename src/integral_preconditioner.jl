@@ -1,9 +1,9 @@
 
-########################################################################################
-#                                                                                      #
-#     Preconditioners for the Integral System                                          #
-#                                                                                      #
-########################################################################################
+#######################################################################################
+#                                                                                     #
+#                     Preconditioners for the Integral System                         #
+#                                                                                     #
+#######################################################################################
 
 type IntegralPreconditioner
     n::Int64  # number of grid points in the x direction
@@ -39,6 +39,7 @@ function PrecondJacobi(subArray, v::Array{Complex128,1}, nit)
         uup   = u[(1+round(Integer,end/2)):end];
         # f - Ru^{n-1}
         if norm(u)!=0
+            # skip this step in the first iteration
             udownaux = v[1:round(Integer,end/2)]       - applyU(subArray, uup);
             uupaux   = v[(1+round(Integer,end/2)):end] - applyL(subArray, udown);
         else

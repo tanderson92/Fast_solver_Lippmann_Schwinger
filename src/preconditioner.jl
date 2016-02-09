@@ -23,6 +23,21 @@ type doubleGSPreconditioner
     end
 end
 
+
+type SparsifyingPreconditioner
+    Msp::SparseMatrixCSC{Complex{Float64},Int64}
+    As::SparseMatrixCSC{Complex{Float64},Int64} # tranposition matrix
+    MspInv
+    function SparsifyingPreconditioner(Msp, As)
+        tic();
+        MspInv = lufact(Msp)
+        println("time for the factorization was ", toc() )
+        new(Msp,As, MspInv) # 
+    end
+end
+
+
+
 type PolarizedTracesPreconditioner
     As::SparseMatrixCSC{Complex{Float64},Int64}
     subDomains
@@ -31,10 +46,10 @@ type PolarizedTracesPreconditioner
     nIt::Int64
     precondtype
     mkl_sparseBlas
-     function PolarizedTracesPreconditioner(As,subDomains; nIt = 1, tol = 1e-2, precondtype ="GS",
+     function PolarizedTracesPreconditioner(As, subDomains; nIt = 1, tol = 1e-2, precondtype ="GS",
                                             mkl_sparseBlas=false)
         IntPrecond = IntegralPreconditioner(subDomains, nIt = nIt, precondtype = precondtype)
-        new(As,subDomains,IntPrecond,tol,nIt,precondtype,mkl_sparseBlas) # don't know if it's the best answer
+        new(As, subDomains, IntPrecond, tol, nIt, precondtype, mkl_sparseBlas) # don't know if it's the best answer
     end
 end
 
@@ -54,12 +69,13 @@ end
 
 
 type doublePreconditioner
-    As::SparseMatrixCSC{Complex{Float64},Int64}
-    Msp::SparseMatrixCSC{Complex{Float64},Int64}
-    doubleGSPreconditioner
-    mkl_sparseBlas
-    maxIter::Int64  # maximum number of inner iterations
-    tol::Float64
+    # Type definition for the bidirectional preconditioner
+    As::SparseMatrixCSC{Complex{Float64},Int64}    # Sparsifying matrix
+    Msp::SparseMatrixCSC{Complex{Float64},Int64}   # Sparsified system to solve
+    doubleGSPreconditioner                         # bi-directional preconditioner
+    mkl_sparseBlas                                 # flag to use sparseBLAS
+    maxIter::Int64                                 # maximum number of inner iterations
+    tol::Float64                                   # tolerance for the inner system 
     function doublePreconditioner(As,Msp,subDomains1,subDomains2; mkl_sparseBlas=false,  maxIter = 20, tol = 1e-2)
         new(As,Msp, doubleGSPreconditioner(subDomains1, subDomains2, Msp), mkl_sparseBlas, maxIter,tol) # don't know if it's the best answer
     end
@@ -91,6 +107,15 @@ function \(M::doubleGSPreconditioner, b::Array{Complex128,1})
     u2 = (M.Tt)*(precondGSOptimized(M.subDomains2, M.T*err))
     return u-u2
 end
+
+function \(M::SparsifyingPreconditioner, b::Array{Complex128,1})
+    #println("Applying the polarized Traces Preconditioner")
+
+    # TODO add more options to the type of preconditioner used
+    #return precondGS(M.subDomains, b)
+    return M.MspInv\(M.As*b)
+end
+
 
 function \(M::GSPreconditioner, b::Array{Complex128,1})
     #println("Applying the polarized Traces Preconditioner")
@@ -131,12 +156,13 @@ function \(M::PolarizedTracesPreconditioner, b::Array{Complex128,1})
     info = gmres!(uPol,x->(applyMMOptUmf(M.subDomains, x)), fPol, M.IntegralPreconditioner, tol = M.tol)
 
     println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
+
     u = uPol[1:round(Integer, end/2)] + uPol[round(Integer, end/2)+1:end]
     
     (v0,v1,vn,vnp) = devectorizeBdyDataContiguous(M.subDomains, u)
 
     U = reconstruction(M.subDomains, M.As*b, v0, v1, vn, vnp);
-    #y = M.GSPreconditioner\(M.As*b)
+
     return U[:]
 end
 
@@ -155,16 +181,9 @@ function \(M::doublePreconditioner, b::Array{Complex128,1})
         else
             x0 =  M.As*b;
         end
-        if M.maxIter == 1
-            # gmres is only a step of iterative refinement
-            y = M.doubleGSPreconditioner\x0
-            err = x0 - M.Msp*x0
-            y += M.doubleGSPreconditioner\err
-        else
             # otherwise we can just use GMRES (the overhead is enough)
             info = gmres!(y, M.Msp, x0 , M.doubleGSPreconditioner, restart = M.maxIter, maxiter = 1, tol = M.tol)
             println("Number of iterations for inner problem is ", countnz(info[2].residuals[:]))
-        end
     else
         y = M.doubleGSPreconditioner\(M.As*b)
     end
@@ -472,114 +491,13 @@ function precondJacobi(subDomains, source::Array{Complex128,1})
     return  uPrecond
 end
 
-# # Optimized Gauss-Seidel Preconditioner
-# # this one uses the Polarization conditions to reduce the number of
-# # solves per iteration (we went from 5 to only two)
-# function precondGSOptimized(subDomains, source::Array{Complex128,1})
-#     ## We are only implementing the Jacobi version of the preconditioner
-#     nSubs = length(subDomains);
-
-#     n = subDomains[1].n
-#     # building the local rhs
-#     rhsLocal = [ zeros(Complex128,subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
-
-#     localSizes = zeros(Int64,nSubs)
-
-#     # copying the sources to local field
-#     for ii = 1:nSubs
-#         rhsLocal[ii][subDomains[ii].indVolIntLocal] = source[subDomains[ii].indVolInt]
-#         # we obtain the local sizes for each subdomain
-#         localSizes[ii] = length(subDomains[ii].indVolIntLocal)
-#     end
-
-#     localLim = [0; cumsum(localSizes)];
-
-#     # uLocalArray = [solve(subDomains[ii],rhsLocal[ii] )  for  ii = 1:nSubs]
-
-#     # allocating memory for the traces
-#     u_0  = zeros(Complex128,n*nSubs)
-#     u_1  = zeros(Complex128,n*nSubs)
-#     u_n  = zeros(Complex128,n*nSubs)
-#     u_np = zeros(Complex128,n*nSubs)
-
-#     index = 1:n
-
-#     # Downward sweep
-#     for ii = 1:nSubs
-#         # this will be slow most likely but it is readable
-#         # we will need to modify this part
-#         ind_0  = subDomains[ii].ind_0
-#         ind_1  = subDomains[ii].ind_1
-#         ind_n  = subDomains[ii].ind_n
-#         ind_np = subDomains[ii].ind_np
-
-#         # making a local copy of the local rhs
-#         rhsLocaltemp = copy(rhsLocal[ii]);
-
-#         if ii !=1
-#             rhsLocaltemp[subDomains[ii].ind_0] +=  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
-#             rhsLocaltemp[subDomains[ii].ind_1] += -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
-#         end
-
-#         # solving the rhs
-#         vDown = solve(subDomains[ii],rhsLocaltemp)
-
-#         # extracting the traces
-#         if ii != nSubs
-#             u_n[(ii-1)*n  + index] = vDown[ind_n]
-#             u_np[(ii-1)*n + index] = vDown[ind_np]
-#         end
-
-#     end
-
-#     # Upward sweep + reflections + reconstruction
-#     # allocating space for the solution
-#     uPrecond = zeros(Complex128, length(source))
-
-#      for ii = nSubs:-1:1
-#         # this will be slow most likely but it is readable
-#         # we will need to modify this part
-#         ind_0  = subDomains[ii].ind_0
-#         ind_1  = subDomains[ii].ind_1
-#         ind_n  = subDomains[ii].ind_n
-#         ind_np = subDomains[ii].ind_np
-
-#         # making a copy of the parititioned source
-#         rhsLocaltemp = copy(rhsLocal[ii]);
-
-#         # adding the source at the boundaries
-#         if ii!= 1
-#             # we need to be carefull at the edges
-#             rhsLocaltemp[subDomains[ii].ind_1]  += -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
-#             rhsLocaltemp[subDomains[ii].ind_0]  +=  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
-#         end
-#         if ii!= nSubs
-#             rhsLocaltemp[subDomains[ii].ind_np] +=  subDomains[ii].H[ind_np,ind_n]*u_0[(ii)*n + index]
-#             rhsLocaltemp[subDomains[ii].ind_n]  += -subDomains[ii].H[ind_n,ind_np]*u_1[(ii)*n + index]
-#         end
-
-#         # solving the local problem
-#         uUp = solve(subDomains[ii],rhsLocaltemp)
-
-#         if ii > 1
-#             u_0[(ii-1)*n + index] = uUp[ind_0]
-#             u_1[(ii-1)*n + index] = uUp[ind_1] - u_np[(ii-2)*n + index]
-#         end
-
-#         # reconstructing the problem on the fly
-#         uPrecond[localLim[ii]+1:localLim[ii+1]] = uUp[subDomains[ii].indVolIntLocal]
-#     end
-
-#     return  uPrecond
-# end
-
 
 # Optimized Gauss-Seidel Preconditioner
 # this one uses the Polarization conditions to reduce the number of
 # solves per iteration (we went from 5 to only two)
 # This version reduces the allocations by 10%
 function precondGSOptimized(subDomains, source::Array{Complex128,1})
-    ## We are only implementing the Jacobi version of the preconditioner
+    ## We are only implementing the Gauss-Seidel version of the preconditioner
     nSubs = length(subDomains);
 
     n = subDomains[1].n
@@ -588,6 +506,7 @@ function precondGSOptimized(subDomains, source::Array{Complex128,1})
 
     localSizes = zeros(Int64,nSubs)
 
+    # allocating spzce for the boundary data
     u_0  = zeros(Complex128,n*nSubs)
     u_1  = zeros(Complex128,n*nSubs)
     u_n  = zeros(Complex128,n*nSubs)
@@ -595,14 +514,16 @@ function precondGSOptimized(subDomains, source::Array{Complex128,1})
 
     index = 1:n
 
-    # Downward sweep
+    # Local solves + Downward sweep
     for ii = 1:nSubs
 
         # obtaining the local sources
         rhsLocal[ii][subDomains[ii].indVolIntLocal] = source[subDomains[ii].indVolInt]
+
         # we obtain the local sizes for each subdomain
         localSizes[ii] = length(subDomains[ii].indVolIntLocal)
 
+        # adding the equivalent sources for the one-sided GRF
         if ii !=1
             rhsLocal[ii][subDomains[ii].ind_0] +=  subDomains[ii].H[subDomains[ii].ind_0,subDomains[ii].ind_1]*u_np[(ii-2)*n + index]
             rhsLocal[ii][subDomains[ii].ind_1] += -subDomains[ii].H[subDomains[ii].ind_1,subDomains[ii].ind_0]*u_n[(ii-2)*n + index]
@@ -622,14 +543,13 @@ function precondGSOptimized(subDomains, source::Array{Complex128,1})
     # obtaining the limit of each subdomain within the global approximated solution
     localLim = [0; cumsum(localSizes)];
 
-
     # Upward sweep + reflections + reconstruction
     # allocating space for the solution
     uPrecond = zeros(Complex128, length(source))
 
     for ii = nSubs:-1:1
 
-        # adding the source at the boundaries
+        # adding the equivalent sources for the one-sided GRF
         if ii!= nSubs
             rhsLocal[ii][subDomains[ii].ind_np] +=  subDomains[ii].H[subDomains[ii].ind_np,subDomains[ii].ind_n]*u_0[(ii)*n + index]
             rhsLocal[ii][subDomains[ii].ind_n]  += -subDomains[ii].H[subDomains[ii].ind_n ,subDomains[ii].ind_np]*u_1[(ii)*n + index]
@@ -638,6 +558,7 @@ function precondGSOptimized(subDomains, source::Array{Complex128,1})
         # solving the local problem
         uUp = solve(subDomains[ii],rhsLocal[ii])
 
+        # extracting the data for the next subdomains and adding the reflections
         if ii > 1
             u_0[(ii-1)*n + index] = uUp[subDomains[ii].ind_0]
             u_1[(ii-1)*n + index] = uUp[subDomains[ii].ind_1] - u_np[(ii-2)*n + index]
