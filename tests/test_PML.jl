@@ -39,11 +39,18 @@ D0 = D[1];
 # we will need to build an interpolant depending on the
 # wave number
 
-Aentriesk = entriesSparseA(k,X,Y,D0, n ,m)
+Aentriesk = entriesSparseA(k,X,Y,D[1], n ,m)[2]
 
-Aentries2k entriesSparseA(0.5*k,X,Y,D0, n ,m)
+Aentries2k = entriesSparseA(0.5*k,X,Y,D[2], n ,m)[2]
+
+Aentries4k = entriesSparseA(0.25*k,X,Y,D[3], n ,m)[2]
 
 
+println(Aentriesk[1][2])
+
+println(Aentries2k[1][2])
+
+println(Aentries4k[1][2])
 
 #G = buildConvMatrix(k,X,Y,D0,h)
 

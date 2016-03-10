@@ -123,14 +123,14 @@ println("Time for the factorization ", toc())
 # println("number of iterations for inner solver using a Gauss-Seidel preconditioner is ", countnz(info[2].residuals[:]))
 
 # instanciating the new preconditioner
-Precond = Preconditioner(As,Mapproxsp,SubArray)
+Precond = Preconditioner(As,Mapproxsp,SubArray);
 
 # PrecondMKL = Preconditioner(As,Mapproxsp,SubArray, mkl_sparseBlas = true)
 
 # building the RHS from the incident field
 # theta = rand(1)[1]*2*pi
 # u_inc = exp(k*im*(X*cos(theta) + Y*sin(theta)));
-u_inc = exp(k*im*X);
+u_inc = exp(k*im*Y);
 rhs = -(fastconv*u_inc - u_inc);
 
 u = zeros(Complex128,N);
