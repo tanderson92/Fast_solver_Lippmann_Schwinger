@@ -123,6 +123,9 @@ function factorize!(subdomain::Subdomain)
             X = zeros(Complex128, subdomain.n*subdomain.m,1)
             # factorizing the matrix
             pardiso(subdomain.Hinv,X, subdomain.H,X)
+            # setting phase and parameters to solve and transposing the matrix
+            # this needs to be done given the different C and Fortran convention
+            # used by Pardiso (C convention) and Julia (Fortran Convention)
             set_phase(subdomain.Hinv, 33)
             set_iparm(subdomain.Hinv,12,2)
         end
