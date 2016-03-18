@@ -69,7 +69,7 @@ function evalPhi(M::Int64,y::Float64,x::Array{Float64,1}; weak = true, singular 
     # the fisr part with only the polynomials
     Phi = pxi
     YminusX = repmat((y-x)', M,1)
-    if weak
+    if weak 
         # polynomials times a logarithm
         Phi = [Phi; pxi.*( log(abs(YminusX)) )]
     end
@@ -82,7 +82,7 @@ function evalPhi(M::Int64,y::Float64,x::Array{Float64,1}; weak = true, singular 
     Phi = [Phi; pxi.*( 1./(YminusX).^2) ]
     end
     # if we ever run into a singularity (just remove it)
-    Phi[Phi.==Inf] = 0
+    Phi[abs(Phi).==Inf] = 0
 
     return Phi
 end
@@ -144,14 +144,7 @@ function computeweights(M::Int64, x::Array{Float64,1}, w::Array{Float64,1}, y::F
     wMod = Phi\m
 end
 
-function legendreInterpMatrix( s::Array{Float64,1}, x::Array{Float64,1}, w::Array{Float64,1})
-    # interpolation matrix from Gauss-Legendre points x to the target points s
-    n = length(x);
-    LegendrePol = evalLegendrePol(n,x)
-    LegendreInterp = evalLegendrePol(n,s)
-    return  LegendreInterp*(diagm((2*(0:n-1)+1)/2))*(LegendrePol.')*diagm(w)
-end
-
+# not done :S
 function modifiedGLWeights3( w::Array{Float64,1},x::Array{Float64,1},y::Float64 )
     # function to obtain the modifed Gauss-Legendre weights to integrate
     # \int_{-1}^1 P_n(x) /(y-x).^2
