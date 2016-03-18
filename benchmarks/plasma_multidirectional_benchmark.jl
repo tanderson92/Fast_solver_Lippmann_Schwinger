@@ -1,7 +1,7 @@
 
 
 
-# benchmark for the negative perturbation
+# benchmark for the plasma perturbation
 
 # Clean version of the DDM ode
 
@@ -30,7 +30,7 @@ maxIter = [ 2 3 4 20]
 
 tolerance = [1e-2, 1e-3, 1e-4]
 
-## Definin the wave speed 
+## Definin the wave speed
 C = 0.4987
 phi(x,y) = 1 - (x-0.05*(1-x.^2)).^2 - C*((1 + 0.3x).^2).*y.^2
 
@@ -65,10 +65,10 @@ for ll = 1:length(H)
     # BLAS, this can be further
     FFTW.set_num_threads(16)
     blas_set_num_threads(16)
-    
+
     println("Frequency is ", k/(2*pi))
     println("Number of discretization points is ", 1/h)
-    
+
     # size of box
     a  = 1
     x = -a/2:h:a/2
@@ -78,96 +78,96 @@ for ll = 1:length(H)
     N = n*m
     X = repmat(x, 1, m)[:]
     Y = repmat(y', n,1)[:]
-    
-    
+
+
     println("Number of Subdomains is ", nSubdomains)
     # we solve \triangle u + k^2(1 + nu(x))u = 0
     # in particular we compute the scattering problem
-    
-    
+
+
     # we extract from a "tabulated" dictionary
     # the good modification for the quadrature modification
     (ppw,D) = referenceValsTrapRule();
     D0 = D[1];
-    
-   
-    
+
+
+
     Ge = buildGConv(x,y,h,n,m,D0,k);
     GFFT = fft(Ge);
-    
+
     fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
-    
+
     println("Building the A sparse")
     @time As = buildSparseA(k,X,Y,D0, n ,m);
-    
+
     println("Building A*G in sparse format")
     @time AG = buildSparseAG(k,X,Y,D0, n ,m);
-    
+
     # need to check everything here :S
-    
+
     Mapproxsp = k^2*(AG*spdiagm(nu(X,Y)));
     Mapproxsp = As + Mapproxsp;
-    
+
     # number of interior points for each subdomain
     SubDomLimits = round(Integer, floor(linspace(1,m+1,nSubdomains+1)))
     # index in y. of the first row of each subdomain
     idx1 = SubDomLimits[1:end-1]
     # index in y of the last row of each subdomains
     idxn = SubDomLimits[2:end]-1
-    
+
     T = speye(N);
-    
+
     index = 1:N;
     index = (reshape(index, n,m).')[:];
-    
+
     T = T[index,:];
-    
+
     MapproxspT =  T*Mapproxsp*T.';
     AGT = T*AG*T.';
     AsT = T*As*T.';
     SubArray1 = [ Subdomain(As,AG,Mapproxsp,x,y, idx1[ii],idxn[ii], npml, h, nu, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
     SubArray2 = [ Subdomain(AsT,AGT,MapproxspT,x,y, idx1[ii],idxn[ii], npml, h, nuT, k, solvertype = "MKLPARDISO") for ii = 1:nSubdomains];
-    
-    
+
+
     # this step is a hack to avoid building new vectors in int32 every time
     for ii = 1:nSubdomains
         convert64_32!(SubArray1[ii])
           convert64_32!(SubArray2[ii])
     end
-    
+
     tic();
     for ii=1:nSubdomains
         factorize!(SubArray1[ii])
           factorize!(SubArray2[ii])
     end
     println("Time for the factorization ", toc())
-    
+
     # loop to test for different tolerances
     for kk = 1:length(tolerance)
         for jj = 1:length(maxIter)
             maxInnerIter = maxIter[jj]
             innerTol = tolerance[kk]
             doublePrecond = doublePreconditioner(As,Mapproxsp,SubArray1,SubArray2; tol = innerTol, maxIter = maxInnerIter);
-            
+
             # we build a set of different incident waves
-            
+
             theta = collect(1:0.3:2*pi)
             time = 0
             nit = 0
             for ii = 1:length(theta)
-            
+
                 u_inc = exp(k*im*(X*cos(theta[ii]) + Y*sin(theta[ii])));
                 rhs = -(fastconv*u_inc - u_inc);
-            
+
                 u = zeros(Complex128,N);
                 tic();
                 info = gmres!(u, fastconv, rhs, doublePrecond, tol = 1.e-10)
                 time += toc();
                 nit+=countnz(info[2].residuals[:])
             end
-            
-            
-            
+
+
+
             println("Solving the plasma example wavespeed")
             println("Frequency is ", k/(2*pi))
             println("Number of discretization points is ", 1/h)
@@ -179,5 +179,5 @@ for ll = 1:length(H)
             println("maximum number of inner iterations ", maxInnerIter )
         end
     end
-    
+
 end
