@@ -1,3 +1,6 @@
+# This file implmentes the Sparsifying preconditioner using MKL Pardiso and as a
+# the built-in UMFPACK as multifrontal solvers
+
 
 using PyPlot
 using Devectorize
@@ -7,6 +10,7 @@ using Pardiso
 include("../src/FastConvolution.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
+
 #Defining Omega
 h = 0.01
 k = 1/h
@@ -31,21 +35,20 @@ println("Number of Subdomains is ", nSubdomains)
 
 
 # we extract from a "tabulated" dictionary
-# the good modification for the quadrature modification
+# the quadrature modification by Duan Rohklin
 (ppw,D) = referenceValsTrapRule();
 D0 = D[1];
 
-
+# defining the perturbation
+# in this case the plasma profile was given by Antoine Cerfon
 nu(x,y) = -0.3*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
 
 Ge = buildGConv(x,y,h,n,m,D0,k);
 GFFT = fft(Ge);
 
+# definin the fast convolution type (which uses a Toeplitz embedding and
+# the FFT)
 fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
-
-u_inc = exp(k*im*Y);
-
-# bdyInd = setdiff(collect(1:N), volInd);
 
 println("Building the A sparse")
 As = buildSparseA(k,X,Y,D0, n ,m);
@@ -57,19 +60,19 @@ AG = buildSparseAG(k,X,Y,D0, n ,m);
 Mapproxsp = k^2*(AG*spdiagm(nu(X,Y)));
 Mapproxsp = As + Mapproxsp;
 
-
+# in this case we use the built-in LU factorization, which relies on UMFPACK
 Minv = lufact(Mapproxsp)
 
 precond(x) = Minv\(As*(fastconv*x));
 
 # building the RHS from the incident field
 u_inc = exp(k*im*Y);
+# rhs = omega^2 G*nu*u_inc
 rhs = -(fastconv*u_inc - u_inc);
-#x = zeros(Complex128,N);
-#info =  gmres!(x, M, rhs, maxiter  = 60)
 
-
+# allocating the solution
 u = zeros(Complex128,N);
+# solving the Lippmann Schwinger equation using gmres and UMFPACK
 @time info =  gmres!(u, precond, Minv\(As*rhs))
 println(info[2].residuals[:])
 
@@ -92,6 +95,7 @@ set_iparm(solverMKL,12, 2)
 set_phase(solverMKL, 33)
 pardiso(solverMKL, x0, Mapproxsp, bb)
 
+# encapculating the Sparsifying preconditioner
 function precondMKL(b)
     x = zeros(b)
     pardiso(solverMKL, x, Mapproxsp, (As*(fastconv*b)))
@@ -99,6 +103,7 @@ function precondMKL(b)
 end
 
 u = zeros(Complex128,N);
+# solving the Lippmann Schwinger equation using gmres and PARDISO
 @time info =  gmres!(u, precondMKL, x0)
 println(info[2].residuals[:])
 
