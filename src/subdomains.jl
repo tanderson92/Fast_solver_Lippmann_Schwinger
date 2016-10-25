@@ -110,25 +110,25 @@ function factorize!(subdomain::Subdomain)
             subdomain.Hinv = lufact(subdomain.H);
         end
 
-        if model.solvertype == "MKLPARDISO"
+        if subdomain.solvertype == "MKLPARDISO"
             # using MKLPardiso from Julia Sparse (only shared memory)
             println("factorizing the matrix using MKL Pardiso")
-            model.Hinv = MKLPardisoSolver();
-            set_nprocs!(model.Hinv, 16)
+            subdomain.Hinv = MKLPardisoSolver();
+            set_nprocs!(subdomain.Hinv, 16)
             #setting the type of the matrix
-            set_matrixtype!(model.Hinv,3)
+            set_matrixtype!(subdomain.Hinv,3)
             # setting we are using a transpose
-            set_iparm!(model.Hinv,12,2)
+            set_iparm!(subdomain.Hinv,12,2)
             # setting the factoriation phase
-            set_phase!(model.Hinv, 12)
-            X = zeros(Complex128, model.size[1],1)
+            set_phase!(subdomain.Hinv, 12)
+            X = zeros(Complex128, subdomain.size[1],1)
             # factorizing the matrix
-            pardiso(model.Hinv,X, model.H,X)
+            pardiso(subdomain.Hinv,X, subdomain.H,X)
             # setting phase and parameters to solve and transposing the matrix
             # this needs to be done given the different C and Fortran convention
             # used by Pardiso (C convention) and Julia (Fortran Convention)
-            set_phase!(model.Hinv, 33)
-            set_iparm!(model.Hinv,12,2)
+            set_phase!(subdomain.Hinv, 33)
+            set_iparm!(subdomain.Hinv,12,2)
     end
 end
 
