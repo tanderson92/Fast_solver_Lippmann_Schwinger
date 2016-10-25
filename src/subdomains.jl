@@ -121,7 +121,7 @@ function factorize!(subdomain::Subdomain)
             set_iparm!(subdomain.Hinv,12,2)
             # setting the factoriation phase
             set_phase!(subdomain.Hinv, 12)
-            X = zeros(Complex128, subdomain.size[1],1)
+            X = zeros(Complex128, subdomain.n*subdomain.m,1)
             # factorizing the matrix
             pardiso(subdomain.Hinv,X, subdomain.H,X)
             # setting phase and parameters to solve and transposing the matrix
@@ -150,7 +150,7 @@ function solve(subdomain::Subdomain, f::Array{Complex128,1})
         end
         # if the linear solvers is MKL Pardiso
         if subdomain.solvertype == "MKLPARDISO"
-            set_phase(subdomain.Hinv, 33)
+            set_phase!(subdomain.Hinv, 33)
             u = zeros(Complex128,length(f))
             pardiso(subdomain.Hinv, u, subdomain.H, f)
         end
