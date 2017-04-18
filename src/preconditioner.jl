@@ -28,11 +28,32 @@ type SparsifyingPreconditioner
     Msp::SparseMatrixCSC{Complex{Float64},Int64}
     As::SparseMatrixCSC{Complex{Float64},Int64} # tranposition matrix
     MspInv
-    function SparsifyingPreconditioner(Msp, As)
+    solverType::String
+    function SparsifyingPreconditioner(Msp, As; solverType::String="UMFPACK")
         tic();
-        MspInv = lufact(Msp)
-        println("time for the factorization was ", toc() )
-        new(Msp,As, MspInv) # 
+        if  solverType=="UMFPACK"
+            MspInv = lufact(Msp)
+            println("time for the factorization was ", toc() )
+        end
+        if  solverType=="MKLPARDISO"
+            MspInv = MKLPardisoSolver();
+            set_nprocs!(MspInv, 16)
+            #setting the type of the matrix
+            set_matrixtype!(MspInv,3)
+            # setting we are using a transpose
+            set_iparm!(MspInv,12,2)
+            # setting the factoriation phase
+            set_phase!(MspInv, 12)
+            X = zeros(Complex128, size(Msp)[2],1)
+            # factorizing the matrix
+            pardiso(MspInv,X, Msp,X)
+            # setting phase and parameters to solve and transposing the matrix
+            # this needs to be done given the different C and Fortran convention
+            # used by Pardiso (C convention) and Julia (Fortran Convention)
+            set_phase!(MspInv, 33)
+            set_iparm!(MspInv,12,2)
+        end
+        new(Msp,As, MspInv, solverType) # 
     end
 end
 
@@ -113,7 +134,14 @@ function \(M::SparsifyingPreconditioner, b::Array{Complex128,1})
 
     # TODO add more options to the type of preconditioner used
     #return precondGS(M.subDomains, b)
-    return M.MspInv\(M.As*b)
+    if M.solverType=="UMFPACK"
+        return M.MspInv\(M.As*b)
+    elseif  M.solverType=="MKLPARDISO"
+        set_phase!(M.MspInv, 33)
+        u = zeros(Complex128,length(b))
+        pardiso(M.MspInv, u, M.Msp, M.As*b)
+        return u
+    end
 end
 
 

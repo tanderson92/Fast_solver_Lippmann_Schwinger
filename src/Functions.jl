@@ -1,6 +1,30 @@
 # Helper functions
 
 
+function createIndices(row::Array{Int64,1}, col::Array{Int64,1}, val::Array{Complex128,1})
+  # function to create the indices for a sparse matrix
+  @assert length(col) == length(val)
+  nn = length(col);
+  mm = length(row);
+
+  Row = kron(row, ones(Int64, nn));
+  Col = kron(ones(Int64,mm), col) + Row;
+  Val = kron(ones(Int64,mm), val)
+  return (Row,Col,Val)
+end
+
+function createIndices(row::Int64, col::Array{Int64,1}, val::Array{Complex128,1})
+
+  @assert length(col) == length(val)
+  nn = length(col);
+  mm = 1;
+
+  Row = kron(row, ones(Int64, nn));
+  Col = kron(ones(Int64,mm), col) + Row;
+  Val = kron(ones(Int64,mm), val)
+  return (Row,Col,Val)
+end
+
 # reference Helmholtz solution for a centered Gaussian
 @inline function solRefHelmholtz(x::Array{Float64,1},y::Array{Float64,1},z::Array{Float64,1}, sigma::Float64, k::Float64)
   r  = sqrt( x.^2 + y.^2 + z.^2)
