@@ -11,7 +11,7 @@ using Devectorize
 using IterativeSolvers
 using Pardiso
 
-include("../src/FastConvolution.jl")
+include("../src/SparsifyingMatrix2D.jl")
 include("../src/quadratures.jl")
 include("../src/subdomains.jl")
 include("../src/preconditioner.jl")
