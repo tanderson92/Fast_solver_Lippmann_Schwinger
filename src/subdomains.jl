@@ -42,9 +42,10 @@ type Subdomain
         # midy = (ylim[2]+ ylim[1])/2
         # widthy = abs(ylim[2] - ylim[1])/2
         # width = h*(ndelta-1);
-        # cutoffFilter(x,y) =  0*x + (y.<=(ylim[2]+h)).*(y.>=(ylim[1]-h)).*(1- fcut(abs(y - width) - witdhy-h, width))  ; #add the rest of the filter in here
+        # filter(x,y) =  0*x + (y.<=(ylim[2]+h)).*(y.>=(ylim[1]-h)).*(1- fcut(abs(y - width) - witdhy-h, width))  ; #add the rest of the filter in here
         spline(y) = (y.<0) +  (y.>=0).*(y.<1).*(2*y.^3 - 3*y.^2 + 1)
-        cutoffFilter(a1,b1,b2,a2,y) = (y.>=a1).*( (y.<b1).*spline(1/(abs(b1-a1)).*(-y+b1)) + (y.>=b1).*(y.<b2) + (y.>=b2).*spline(1/(abs(b2-a2)).*(y-b2)))
+        filter(a1,b1,b2,a2,y) = (y.>=a1).*( (y.<b1).*spline(1/(abs(b1-a1)).*(-y+b1)) + (y.>=b1).*(y.<b2) + (y.>=b2).*spline(1/(abs(b2-a2)).*(y-b2)))
+
 
         # We add the complex shift in here
         # We need to figure out the best constant, it should scale as k
@@ -52,14 +53,17 @@ type Subdomain
         shift = 2*k
         #println("using shift = k")
         # defining the speed with the correct cut-off
+        # we need to define nu1 before hand, the only first if block is leaky
+        nu1(x,y) = x.*y;
+
         if ind1 == 1
-            nu1(x,y) = cutoffFilter(y1[1]-h, y1[1], y1[end-ndelta+2], y1[end-2] , y).*(
+            nu1(x,y) = filter(y1[1]-h, y1[1], y1[end-ndelta+2], y1[end-2] , y).*(
                         nu(x,y) - shift*im*filtershift(y1[1]-h, y1[end-ndelta+2],y)) ;
         elseif indn == length(y)
-            nu1(x,y) = cutoffFilter(y1[3], y1[ndelta-2], y1[end], y1[end]+h , y).*(
+            nu1(x,y) = filter(y1[3], y1[ndelta-2], y1[end], y1[end]+h , y).*(
                         nu(x,y) - shift*im*filtershift( y1[ndelta-2],y1[end]+h,y)) ;
         else
-            nu1(x,y) = cutoffFilter(y1[3], y1[ndelta-2], y1[end-ndelta+2], y1[end-2] , y).*(
+            nu1(x,y) = filter(y1[3], y1[ndelta-2], y1[end-ndelta+2], y1[end-2] , y).*(
                         nu(x,y)- shift*im*filtershift(y1[ndelta-2], y1[end-ndelta+2],y));
         end
 
@@ -110,26 +114,24 @@ function factorize!(subdomain::Subdomain)
             subdomain.Hinv = lufact(subdomain.H);
         end
 
-        if model.solvertype == "MKLPARDISO"
-            # using MKLPardiso from Julia Sparse (only shared memory)
-            println("factorizing the matrix using MKL Pardiso")
-            model.Hinv = MKLPardisoSolver();
-            set_nprocs!(model.Hinv, 16)
+        if subdomain.solvertype == "MKLPARDISO"
+            subdomain.Hinv = MKLPardisoSolver();
+            set_nprocs!(subdomain.Hinv, 16)
             #setting the type of the matrix
-            set_matrixtype!(model.Hinv,3)
+            set_matrixtype!(subdomain.Hinv,3)
             # setting we are using a transpose
-            set_iparm!(model.Hinv,12,2)
+            set_iparm!(subdomain.Hinv,12,2)
             # setting the factoriation phase
-            set_phase!(model.Hinv, 12)
-            X = zeros(Complex128, model.size[1],1)
+            set_phase!(subdomain.Hinv, 12)
+            X = zeros(Complex128, subdomain.n*subdomain.m,1)
             # factorizing the matrix
-            pardiso(model.Hinv,X, model.H,X)
+            pardiso(subdomain.Hinv,X, subdomain.H,X)
             # setting phase and parameters to solve and transposing the matrix
             # this needs to be done given the different C and Fortran convention
             # used by Pardiso (C convention) and Julia (Fortran Convention)
-            set_phase!(model.Hinv, 33)
-            set_iparm!(model.Hinv,12,2)
-    end
+            set_phase!(subdomain.Hinv, 33)
+            set_iparm!(subdomain.Hinv,12,2)
+        end
 end
 
 function convert64_32!(subdomain::Subdomain)
@@ -150,7 +152,7 @@ function solve(subdomain::Subdomain, f::Array{Complex128,1})
         end
         # if the linear solvers is MKL Pardiso
         if subdomain.solvertype == "MKLPARDISO"
-            set_phase(subdomain.Hinv, 33)
+            set_phase!(subdomain.Hinv, 33)
             u = zeros(Complex128,length(f))
             pardiso(subdomain.Hinv, u, subdomain.H, f)
         end
@@ -172,7 +174,7 @@ function solve(subdomain::Subdomain, f::Array{Complex128,2})
         end
         # if the linear solvers is MKL Pardiso
         if subdomain.solvertype == "MKLPARDISO"
-            set_phase(subdomain.Hinv, 33)
+            set_phase!(subdomain.Hinv, 33)
             u = zeros(f)
             pardiso(subdomain.Hinv, u, subdomain.H, f)
         end

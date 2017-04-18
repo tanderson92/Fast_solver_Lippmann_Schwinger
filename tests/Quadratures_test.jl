@@ -43,12 +43,10 @@ D0 = D[1];
 # in this case the plasma profile was given by Antoine Cerfon
 nu(x,y) = -0.3*exp(-20*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
 
-Ge = buildGConv(x,y,h,n,m,D0,k);
-GFFT = fft(Ge);
-
-# definin the fast convolution type (which uses a Toeplitz embedding and
-# the FFT)
-fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
+# ## Using Trapezoidal rule plus a diagonal modification (Duan Rohklin)
+# fastconv = buildFastConvolution(x,y,h,k,nu)
+## Using Greengard Vico quadrature
+fastconv = buildFastConvolution(x,y,h,k,nu; quadRule = "Greengard_Vico")
 
 println("Building the A sparse")
 As = buildSparseA(k,X,Y,D0, n ,m);
