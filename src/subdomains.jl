@@ -115,6 +115,8 @@ function factorize!(subdomain::Subdomain)
         end
 
         if subdomain.solvertype == "MKLPARDISO"
+            # using MKLPardiso from Julia Sparse (only shared memory)
+            println("factorizing the matrix using MKL Pardiso")
             subdomain.Hinv = MKLPardisoSolver();
             set_nprocs!(subdomain.Hinv, 16)
             #setting the type of the matrix
@@ -132,6 +134,7 @@ function factorize!(subdomain::Subdomain)
             set_phase!(subdomain.Hinv, 33)
             set_iparm!(subdomain.Hinv,12,2)
         end
+
 end
 
 function convert64_32!(subdomain::Subdomain)
