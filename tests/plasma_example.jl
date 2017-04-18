@@ -23,15 +23,15 @@ k = (1/h)
 # setting the correct number of threads for FFTW and
 # BLAS, this can be further
 FFTW.set_num_threads(16)
-blas_set_num_threads(16)
+BLAS.set_num_threads(16)
 
 println("Frequency is ", k/(2*pi))
 println("Number of discretization points is ", 1/h)
 
 # size of box
 a  = 1
-x = -a/2:h:a/2
-y = -a/2:h:a/2
+x = collect(-a/2:h:a/2)
+y = collect(-a/2:h:a/2)
 n = length(x)
 m = length(y)
 N = n*m
@@ -55,7 +55,7 @@ phi(x,y) = 1 - (x-0.05*(1-x.^2)).^2 - C*((1 + 0.3x).^2).*y.^2
 
 aa = [0.45, 0.196, 0.51, 0.195, 0.63 ];
 xI = [0.4 , 0.54 , -0.14, -0.5, 0.18];
-yI = [0   , -0.28, 0.70, -0.01, 0.8];  
+yI = [0   , -0.28, 0.70, -0.01, 0.8];
 
 g(x,y) = aa[1]*exp(-((x-xI[1]).^2 + (y-yI[1]).^2)/0.01 ) +
          aa[2]*exp(-((x-xI[2]).^2 + (y-yI[2]).^2)/0.01 ) +
@@ -63,16 +63,20 @@ g(x,y) = aa[1]*exp(-((x-xI[1]).^2 + (y-yI[1]).^2)/0.01 ) +
          aa[4]*exp(-((x-xI[4]).^2 + (y-yI[4]).^2)/0.01 ) +
          aa[5]*exp(-((x-xI[5]).^2 + (y-yI[5]).^2)/0.01 ) ;
 
-nu1(x,y)=  (phi(x,y).>0.05).*(-1.5*(phi(x,y)-0.05) - g(x,y).*cos(0.9*y))  ;  
+nu2(x,y)=  (phi(x,y).>0.05).*(-1.5*(phi(x,y)-0.05) - g(x,y).*cos(0.9*y))  ;
 
-nu(x,y) = -nu1(3*x,3*y); # sign is important the convention with respect to Leslie paper is different
+nu(x,y) = -nu2(3*x,3*y); # sign is important the convention with respect to Leslie paper is different
 
 nuT(x,y)= nu(y,x)
 
-Ge = buildGConv(x,y,h,n,m,D0,k);
-GFFT = fft(Ge);
+# Ge = buildGConv(x,y,h,n,m,D0,k);
+# GFFT = fft(Ge);
 
-fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
+# fastconv = FastM(GFFT,nu(X,Y),3*n-2,3*m-2,n, m, k);
+
+fastconv = buildFastConvolution(x,y,h,k,nu ; quadRule = "Greengard_Vico")
+
+
 figure(1); clf();
 imshow(real(reshape( (1-nu(X,Y)),n,m)), extent=[x[1], x[end], y[1], y[end]]);cb =  colorbar();
 
@@ -112,14 +116,14 @@ SubArray2 = [ Subdomain(AsT,AGT,MapproxspT,x,y, idx1[ii],idxn[ii], npml, h, nuT,
 
 # this step is a hack to avoid building new vectors in int32 every time
 for ii = 1:nSubdomains
-	convert64_32!(SubArray1[ii])
-      convert64_32!(SubArray2[ii])
+    convert64_32!(SubArray1[ii])
+    convert64_32!(SubArray2[ii])
 end
 
 tic();
 for ii=1:nSubdomains
 	factorize!(SubArray1[ii])
-      factorize!(SubArray2[ii])
+    factorize!(SubArray2[ii])
 end
 println("Time for the factorization ", toc())
 
