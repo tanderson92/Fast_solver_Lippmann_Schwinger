@@ -1,5 +1,5 @@
 # file to define a subdomain for solving the Lippmann Schwinger equation
-type Subdomain
+struct Subdomain
     n::Int64
     m::Int64
     h::Float64

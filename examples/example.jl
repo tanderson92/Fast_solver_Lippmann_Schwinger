@@ -5,6 +5,12 @@
 
 using PyPlot
 using IterativeSolvers
+using SpecialFunctions
+using SparseArrays
+using Distributed
+using SharedArrays
+using LinearAlgebra
+using FFTW
 using Pardiso
 
 
@@ -29,8 +35,8 @@ x = collect(-a/2:h:a/2)
 y = collect(-a/2:h:a/2)
 (n,m) = length(x), length(y)
 N = n*m
-X = repmat(x, 1, m)[:]
-Y = repmat(y', n,1)[:]
+X = repeat(x, 1, m)[:]
+Y = repeat(y', n,1)[:]
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 
 # We use the modified quadrature in Ruan and Rohklin
@@ -38,7 +44,7 @@ Y = repmat(y', n,1)[:]
 D0 = D[1];
 
 # Defining the smooth perturbation of the slowness
-nu(x,y) = 0.3*exp(-40*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
+nu(x,y) = @. 0.3*exp(-40*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
 
 ## You can choose between Duan Rohklin trapezoidal quadrature
 # fastconv = buildFastConvolution(x,y,h,k,nu)
@@ -54,22 +60,24 @@ fastconv = buildFastConvolution(x,y,h,k,nu, quadRule = "Greengard_Vico");
 
 # defining the preconditioner
 # # We use UMFPACK by default
-# precond = SparsifyingPreconditioner(Mapproxsp, As))
+# precond = SparsifyingPreconditioner(Mapproxsp, As)
 # We use MKLPARDISO
 precond = SparsifyingPreconditioner(Mapproxsp, As; solverType="MKLPARDISO")
 
 # building the RHS from the incident field
-u_inc = exp(k*im*X);
+u_inc = exp.(k*im*X);
 rhs = -k^2*FFTconvolution(fastconv, nu(X,Y).*u_inc) ;
 
 #rhs = u_inc;
 
 # allocating the solution
-u = zeros(Complex128,N);
+u = zeros(Complex{Float64},N);
 
+## TODO / FIXME Either with / without the preconditioner I see LAPACKEXception(1)
 # solving the system using GMRES
-@time info =  gmres!(u, fastconv, rhs, precond)
-println(info[2].residuals[:])
+#@time info =  gmres!(u, fastconv, rhs, Pl = precond, log = true)
+@time info =  gmres!(u, fastconv, rhs, log = true)
+println(info[2].data[:resnorm])
 
 # plotting the solution
 figure(1)

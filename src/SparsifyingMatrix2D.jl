@@ -5,7 +5,7 @@ include("FastConvolution.jl")
 function entriesSparseA(k,X,Y,D0, n ,m)
   # we need to have an even number of points
   @assert mod(length(X),2) == 1
-  Entries  = Array{Complex128}[]
+  Entries  = Array{Complex{Float64}}[]
   Indices  = Array{Int64}[]
 
   IndRelative = zeros(Int64,3,3)
@@ -17,7 +17,7 @@ function entriesSparseA(k,X,Y,D0, n ,m)
 
   # computing the entries for the interior
   # extracting indices at the center of the stencil
-  indVol = round(Integer, n*(m-1)/2 + (n+1)/2 + IndRelative[:] );
+  indVol = round.(Integer, n*(m-1)/2 .+ (n+1)/2 .+ IndRelative[:] );
   # extracting only the far field indices
   indVolC = setdiff(collect(1:N),indVol);
   GSampled = sampleG(k,X,Y,indVol, D0)[:,indVolC];
@@ -30,7 +30,7 @@ function entriesSparseA(k,X,Y,D0, n ,m)
   # this is for the edges
 
   # for  x = xmin, y = 0
-  indFz1 = round(Integer, n*(m-1)/2 +1 + IndRelative[:,2:3][:]);
+  indFz1 = round.(Integer, n*(m-1)/2 .+1 .+ IndRelative[:,2:3][:]);
   indC = setdiff(collect(1:N),indFz1);
   GSampled = sampleG(k,X,Y,indFz1, D0)[:,indC ];
   (U,s,V) = svd(GSampled);
@@ -38,7 +38,7 @@ function entriesSparseA(k,X,Y,D0, n ,m)
   push!(Indices, IndRelative[:,2:3][:]); #'
 
   # for  x = xmax, y = 0
-  indFz2 = round(Integer, n*(m-1)/2 + IndRelative[:,1:2][:]);
+  indFz2 = round.(Integer, n*(m-1)/2 .+ IndRelative[:,1:2][:]);
   indC = setdiff(collect(1:N),indFz2);
   GSampled = sampleG(k,X,Y,indFz2, D0)[:,indC ];
   (U,s,V) = svd(GSampled);
@@ -46,7 +46,7 @@ function entriesSparseA(k,X,Y,D0, n ,m)
   push!(Indices,IndRelative[:,1:2][:]); #'
 
   # for  y = ymin, x = 0
-  indFx1 = round(Integer, (n+1)/2 + IndRelative[2:3,:][:]);
+  indFx1 = round.(Integer, (n+1)/2 .+ IndRelative[2:3,:][:]);
   indC = setdiff(collect(1:N),indFx1);
   GSampled = sampleG(k,X,Y,indFx1, D0)[:,indC ];
   (U,s,V) = svd(GSampled);
@@ -54,7 +54,7 @@ function entriesSparseA(k,X,Y,D0, n ,m)
   push!(Indices, IndRelative[2:3,:][:]); #'
 
   # for  y = ymin, x = 0
-  indFx2 = round(Integer, N - (n+1)/2 + IndRelative[1:2,:][:]);
+  indFx2 = round.(Integer, N - (n+1)/2 .+ IndRelative[1:2,:][:]);
   indC = setdiff(collect(1:N),indFx2);
   GSampled = sampleG(k,X,Y,indFx2, D0)[:,indC ];
   (U,s,V) = svd(GSampled);
@@ -62,10 +62,10 @@ function entriesSparseA(k,X,Y,D0, n ,m)
   push!(Indices,IndRelative[1:2,:][:]); #'
 
   # For the corners
-  indcorner1 = round(Integer, 1       + IndRelative[2:3,2:3][:]);
-  indcorner2 = round(Integer, n       + IndRelative[2:3,1:2][:]);
-  indcorner3 = round(Integer, n*m-n+1 + [0, 1,-n,-n+1]);
-  indcorner4 = round(Integer, n*m     + [0,-1,-n,-n-1]);
+  indcorner1 = round.(Integer, 1       .+ IndRelative[2:3,2:3][:]);
+  indcorner2 = round.(Integer, n       .+ IndRelative[2:3,1:2][:]);
+  indcorner3 = round.(Integer, n*m-n+1 .+ [0, 1,-n,-n+1]);
+  indcorner4 = round.(Integer, n*m     .+ [0,-1,-n,-n-1]);
 
   indC = setdiff(collect(1:N),indcorner1);
   GSampled = sampleG(k,X,Y,indcorner1, D0)[:,indC ];
@@ -104,7 +104,7 @@ end
 function entriesSparseAConv(k,X,Y,fastconv::FastM, n ,m)
   # we need to have an even number of points
   @assert mod(length(X),2) == 1
-  Entries  = Array{Complex128}[]
+  Entries  = Array{Complex{Float64}}[]
   Indices  = Array{Int64}[]
 
   IndRelative = zeros(Int64,3,3)
@@ -203,13 +203,13 @@ end
 
 
 function entriesSparseG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
-                        D0::Complex128, n::Int64 ,m::Int64)
+                        D0::Complex{Float64}, n::Int64 ,m::Int64)
   # function to compute the entried of G, inside the volume, at the boundaries
   # and at the corners. This allows us to compute A*G in O(n) time instead of
   # O(n^2)
   # we need to have an even number of points
   @assert mod(length(X),2) == 1
-  Entries  = Array{Complex128}[]
+  Entries  = Array{Complex{Float64}}[]
 
   IndRelative = zeros(Int64,3,3)
   IndRelative = [-n-1 -n -n+1;
@@ -219,41 +219,41 @@ function entriesSparseG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
   N = n*m;
 
   # computing the entries for the interior
-  indVol = round(Integer, n*(m-1)/2 + (n+1)/2 + IndRelative[:] );
+  indVol = round.(Integer, n*(m-1)/2 + (n+1)/2 .+ IndRelative[:] );
   GSampled = sampleG(k,X,Y,indVol, D0)[:,indVol];
 
   push!(Entries,GSampled);
 
   # for  x = xmin, y = 0
-  indFz1 = round(Integer, n*(m-1)/2 +1 + [0,1,n,n+1,-n, -n+1]);
+  indFz1 = round.(Integer, n*(m-1)/2 +1 .+ [0,1,n,n+1,-n, -n+1]);
   GSampled = sampleG(k,X,Y,indFz1, D0)[:,indFz1];
 
   push!(Entries,GSampled);
 
   # for  x = xmax, y = 0
-  indFz2 = round(Integer, n*(m-1)/2 + [-1,0,n,n-1,-n, -n-1]);
+  indFz2 = round.(Integer, n*(m-1)/2 .+ [-1,0,n,n-1,-n, -n-1]);
   GSampled = sampleG(k,X,Y,indFz2, D0)[:,indFz2];
 
   push!(Entries,GSampled);
 
   # for  y = ymin, x = 0
-  indFx1 = round(Integer, (n+1)/2 + [-1,0,1,n,n+1, n-1]);
+  indFx1 = round.(Integer, (n+1)/2 .+ [-1,0,1,n,n+1, n-1]);
   GSampled = sampleG(k,X,Y,indFx1, D0)[:,indFx1];
 
   push!(Entries,GSampled);
 
 
   # for  y = ymin, x = 0
-  indFx2 = round(Integer, N - (n+1)/2 + [-1,0,1,-n,-n+1, -n-1]);
+  indFx2 = round.(Integer, N - (n+1)/2 .+ [-1,0,1,-n,-n+1, -n-1]);
   GSampled = sampleG(k,X,Y,indFx2, D0)[:,indFx2];
 
   push!(Entries,GSampled);
 
   # For the corners
-  indcorner1 = round(Integer, 1 + [0,1, n,n+1]);
-  indcorner2 = round(Integer, n + [0,-1, n,n-1]);
-  indcorner3 = round(Integer, n*m-n+1 + [0,1, -n,-n+1]);
-  indcorner4 = round(Integer, n*m + [0,-1, -n,-n-1]);
+  indcorner1 = round.(Integer, 1 .+ [0,1, n,n+1]);
+  indcorner2 = round.(Integer, n .+ [0,-1, n,n-1]);
+  indcorner3 = round.(Integer, n*m-n+1 .+ [0,1, -n,-n+1]);
+  indcorner4 = round.(Integer, n*m .+ [0,-1, -n,-n-1]);
 
   GSampled = sampleG(k,X,Y,indcorner1, D0)[:,indcorner1];
   push!(Entries,GSampled);
@@ -282,7 +282,7 @@ function entriesSparseGConv(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
   # O(n^2)
   # we need to have an even number of points
   @assert mod(length(X),2) == 1
-  Entries  = Array{Complex128}[]
+  Entries  = Array{Complex{Float64}}[]
 
   IndRelative = zeros(Int64,3,3)
   IndRelative = [-n-1 -n -n+1;
@@ -349,7 +349,7 @@ end
 
 
 function buildSparseAG(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
-                       D0::Complex128, n::Int64 ,m::Int64; method::String = "normal")
+                       D0::Complex{Float64}, n::Int64 ,m::Int64; method::String = "normal")
 # function that build the sparsigying preconditioner
 
 
@@ -534,7 +534,7 @@ function entriesSparseA3D(k,X,Y,Z,D0, n ,m, l)
   # in this case we need to build everythig with ranodmized methods
   # we need to have an odd number of points
   #@assert mod(length(X),2) == 1
-  Entries  = Array{Complex128}[]
+  Entries  = Array{Complex{Float64}}[]
   Indices  = Array{Int64}[]
 
   N = n*m*l;
@@ -804,7 +804,7 @@ end
 
 
 function buildSparseA(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},
-                       D0::Complex128, n::Int64 ,m::Int64; method::String = "normal")
+                       D0::Complex{Float64}, n::Int64 ,m::Int64; method::String = "normal")
 # function that build the sparsigying preconditioner
 
 

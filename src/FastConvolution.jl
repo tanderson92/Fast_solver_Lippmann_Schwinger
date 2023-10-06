@@ -4,10 +4,12 @@
 
 include("Functions.jl")
 
+using SpecialFunctions
 
-type FastM
+
+struct FastM
     # type to encapsulate the fast application of M = I + omega^2G*spadiagm(nu)
-    GFFT :: Array{Complex128,2}
+    GFFT :: Array{Complex{Float64},2}
     nu :: Array{Float64,1}
     # number of points in the extended domain
     ne :: Int64
@@ -25,7 +27,19 @@ end
 
 import Base.*
 
-function *(M::FastM, b::Array{Complex128,1})
+function Base.size(v::FastM, dim)
+  size(v.nu, dim)
+end
+
+#function LinearAlgebra.mul!(Y::Vector{Complex{Float64}},M::FastM,b::Vector{Complex{Float64}},α::Bool,β::Bool)
+#  Y = α * fastconvolution(M,b) + β*Y
+#end
+
+function LinearAlgebra.mul!(Y::AbstractArray{Complex{Float64},1},M::FastM,b::AbstractArray{Complex{Float64},1},α::Bool,β::Bool)
+  Y = α * fastconvolution(M,b) + β*Y
+end
+
+function *(M::FastM, b::Array{Complex{Float64},1})
     # function to overload the applyication of
     # M using a Toeplitz reduction via a FFT
     # dummy function to call fastconvolution
@@ -35,7 +49,7 @@ end
 
 
 
-@inline function fastconvolution(M::FastM, b::Array{Complex128,1})
+@inline function fastconvolution(M::FastM, b::AbstractArray{Complex{Float64},1})
     # function to overload the applyication of
     # M using a Toeplitz reduction via a FFT
 
@@ -47,7 +61,7 @@ end
       indMiddle = round(Integer, M.n)
 
       # Allocate the space for the extended B
-      BExt = zeros(Complex128,M.ne, M.me);
+      BExt = zeros(Complex{Float64},M.ne, M.me);
       # Apply spadiagm(nu) and ented by zeros
       BExt[1:M.n,1:M.m]= reshape(M.nu.*b,M.n,M.m) ;
 
@@ -66,7 +80,7 @@ end
       # frequency domain
 
       # Allocate the space for the extended B
-      BExt = zeros(Complex128,M.ne, M.me);
+      BExt = zeros(Complex{Float64},M.ne, M.me);
       # Apply spadiagm(nu) and ented by zeros
       BExt[1:M.n,1:M.m]= reshape(M.nu.*b,M.n,M.m) ;
 
@@ -86,7 +100,7 @@ end
     return (b + B[:])
 end
 
-@inline function FFTconvolution(M::FastM, b::Array{Complex128,1})
+@inline function FFTconvolution(M::FastM, b::Array{Complex{Float64},1})
     # function to overload the applyication of
     # convolution of b times G
 
@@ -96,7 +110,7 @@ end
       indMiddle = round(Integer, M.n)
 
       # Allocate the space for the extended B
-      BExt = zeros(Complex128,M.ne, M.ne);
+      BExt = zeros(Complex{Float64},M.ne, M.ne);
       # Apply spadiagm(nu) and ented by zeros
       BExt[1:M.n,1:M.m]= reshape(M.nu.*b,M.n,M.m) ;
 
@@ -115,7 +129,7 @@ end
       # frequency domain
 
       # Allocate the space for the extended B
-      BExt = zeros(Complex128,M.ne, M.ne);
+      BExt = zeros(Complex{Float64},M.ne, M.ne);
       # Apply spadiagm(nu) and ented by zeros
       BExt[1:M.n,1:M.n]= reshape(b,M.n,M.n) ;
 
@@ -135,7 +149,7 @@ end
 # # #this is the sequantial version for sampling G
 # function sampleG(k,X,Y,indS, D0)
 #     # function to sample the Green's function at frequency k
-#     Gc = zeros(Complex128, length(indS), length(X))
+#     Gc = zeros(Complex{Float64}, length(indS), length(X))
 #     for i = 1:length(indS)
 #         ii = indS[i]
 #         r  = sqrt( (X-X[ii]).^2 + (Y-Y[ii]).^2);
@@ -156,8 +170,8 @@ function buildFastConvolution(x::Array{Float64,1},y::Array{Float64,1},
     (n,m) = length(x), length(y)
     Ge    = buildGConv(x,y,h,n,m,D0,k);
     GFFT  = fft(Ge);
-    X = repmat(x, 1, m)[:]
-    Y = repmat(y', n,1)[:]
+    X = repeat(x, 1, m)[:]
+    Y = repeat(y', n,1)[:]
 
     return FastM(GFFT,nu(X,Y),2*n-1,2*m-1,n, m, k);
 
@@ -166,16 +180,16 @@ function buildFastConvolution(x::Array{Float64,1},y::Array{Float64,1},
       Lp = 4*(abs(x[end] - x[1]) + h)
       L  =   (abs(x[end] - x[1]) + h)*1.5
       (n,m) = length(x), length(y)
-      X = repmat(x, 1, m)[:]
-      Y = repmat(y', n,1)[:]
+      X = repeat(x, 1, m)[:]
+      Y = repeat(y', n,1)[:]
 
       # this is depending if n is odd or not
       if mod(n,2) == 0
         kx = (-(2*n):1:(2*n-1));
         ky = (-(2*m):1:(2*m-1));
 
-        KX = (2*pi/Lp)*repmat(kx, 1, 4*m);
-        KY = (2*pi/Lp)*repmat(ky', 4*n,1);
+        KX = (2*pi/Lp)*repeat(kx, 1, 4*m);
+        KY = (2*pi/Lp)*repeat(ky', 4*n,1);
 
         S = sqrt(KX.^2 + KY.^2);
 
@@ -186,8 +200,8 @@ function buildFastConvolution(x::Array{Float64,1},y::Array{Float64,1},
         # kx = (-2*(n-1):1:2*(n-1) )/4;
         # ky = (-2*(m-1):1:2*(m-1) )/4;
 
-        # KX = (2*pi/Lp)*repmat(kx, 1, 4*m-3);
-        # KY = (2*pi/Lp)*repmat(ky', 4*n-3,1);
+        # KX = (2*pi/Lp)*repeat(kx, 1, 4*m-3);
+        # KY = (2*pi/Lp)*repeat(ky', 4*n-3,1);
 
         # S = sqrt(KX.^2 + KY.^2);
 
@@ -199,8 +213,8 @@ function buildFastConvolution(x::Array{Float64,1},y::Array{Float64,1},
         kx = (-2*n:1:2*n-1);
         ky = (-2*m:1:2*m-1);
 
-        KX = (2*pi/Lp)*repmat( kx, 1,4*m);
-        KY = (2*pi/Lp)*repmat(ky',4*n,  1);
+        KX = (2*pi/Lp)*repeat( kx, 1,4*m);
+        KY = (2*pi/Lp)*repeat(ky',4*n,  1);
 
         S = sqrt(KX.^2 + KY.^2);
 
@@ -215,7 +229,7 @@ function buildFastConvolution(x::Array{Float64,1},y::Array{Float64,1},
 end
 
 
-@everywhere function sampleG(k,X,Y,indS, D0)
+function sampleG(k,X,Y,indS, D0)
     # function to sample the Green's function at frequency k
 
   #   R  = SharedArray(Float64, length(indS), length(X))
@@ -232,14 +246,14 @@ end
 
   h = abs(X[2] - X[1])
 
-  R  = SharedArray(Float64, length(indS), length(X))
+  R  = SharedArray{Float64}(length(indS), length(X))
   Xshared = convert(SharedArray, X)
   Yshared = convert(SharedArray, Y)
-  @sync begin
-    @parallel for i = 1:length(indS)
+  begin
+    for i = 1:length(indS)
       #for i = 1:length(indS)
       ii = indS[i]
-      R[i,:]  = sqrt( (Xshared-Xshared[ii]).^2 + (Yshared-Yshared[ii]).^2);
+      R[i,:]  = sqrt.( (Xshared.-Xshared[ii]).^2 + (Yshared.-Yshared[ii]).^2);
       R[i,ii] = 1;
     end
   end
@@ -270,14 +284,14 @@ function sampleGConv(k,X,Y,indS, fastconv::FastM)
   #   end
   # end
 
-  R  = zeros(Complex128, length(indS), length(X))
+  R  = zeros(Complex{Float64}, length(indS), length(X))
    for i = 1:length(indS)
       #for i = 1:length(indS)
       ii = indS[i]
       R[i,ii] = 1;
     end
 
-   Gc =  zeros(Complex128, length(indS), length(X))
+   Gc =  zeros(Complex{Float64}, length(indS), length(X))
     for i = 1:length(indS)
         Gc[i,:]= FFTconvolution(fastconv, R[i,:][:])
     end
@@ -313,23 +327,23 @@ end
 
 ## Parallel functions to sample the Kernel
 
-@everywhere function myrange(q::SharedArray)
+function myrange(q::SharedArray)
     idx = indexpids(q)
     if idx == 0
         # This worker is not assigned a piece
         return 1:0, 1:0
     end
     nchunks = length(procs(q))
-    splits = [round(Int, s) for s in linspace(0,size(q,2),nchunks+1)]
+    splits = [round(Int, s) for s in LinRange(0,size(q,2),nchunks+1)]
     1:size(q,1), splits[idx]+1:splits[idx+1]
 end
 
-@everywhere function sampleGkernelpar(k,r::Array{Float64,1},h)
+function sampleGkernelpar(k,r::Array{Float64,1},h)
   n  = length(r)
   println("Sample kernel parallel loop ")
-  G = SharedArray(Complex128,n)
+  G = SharedArray(Complex{Float64},n)
   rshared = convert(SharedArray, r)
-  @sync @parallel for ii = 1:n
+  for ii = 1:n
           @inbounds  G[ii] = 1im/4*hankelh1(0, k*rshared[ii])*h^2;
   end
   return sdata(G)
@@ -337,10 +351,10 @@ end
 
 ## two different versions of the same function with slight different input
 
-@everywhere function sampleGkernelpar(k,R::Array{Float64,2},h)
+function sampleGkernelpar(k,R::Array{Float64,2},h)
   (m,n)  = size(R)
   println("Sample kernel parallel loop with chunks ")
-  G = SharedArray(Complex128,m,n)
+  G = SharedArray(Complex{Float64},m,n)
   @time Rshared = convert(SharedArray, R)
   @sync begin
         for p in procs(G)
@@ -353,7 +367,7 @@ end
 @everywhere function sampleGkernelpar(k,R::SharedArray{Float64,2},h)
   (m,n)  = size(R)
   #println("Sample kernel parallel loop with chunks 2 ")
-  G = SharedArray(Complex128,m,n)
+  G = SharedArray{Complex{Float64}}(m,n)
   @sync begin
         for p in procs(G)
             @async remotecall_fetch(sampleGkernel_shared_chunk!,p, G, R,k,h)
@@ -412,8 +426,8 @@ function buildGConv(x,y,h::Float64,n::Int64,m::Int64,D0,k::Float64)
       xe = collect((x[1]-(n-1)/2*h):h:(x[end]+(n-1)/2*h));
       ye = collect((y[1]-(m-1)/2*h):h:(y[end]+(m-1)/2*h));
 
-      Xe = repmat(xe, 1, 2*m-1);
-      Ye = repmat(ye', 2*n-1,1);
+      Xe = repeat(xe, 1, 2*m-1);
+      Ye = repeat(ye', 2*n-1,1);
 
 
     else
@@ -424,8 +438,8 @@ function buildGConv(x,y,h::Float64,n::Int64,m::Int64,D0,k::Float64)
       # xe = collect((x[1]-n/2*h):h:(x[end]+n/2*h));
       # ye = collect((y[1]-m/2*h):h:(y[end]+m/2*h));
 
-      # Xe = repmat(xe, 1, 2*m-1);
-      # Ye = repmat(ye', 2*n-1,1);
+      # Xe = repeat(xe, 1, 2*m-1);
+      # Ye = repeat(ye', 2*n-1,1);
       # # to avoid evaluating at the singularity
       # indMiddle = m
 
@@ -454,8 +468,8 @@ function buildGConvPar(x,y,h,n,m,D0,k)
     xe = collect((x[1]-(n-1)/2*h):h:(x[end]+(n-1)/2*h));
     ye = collect((y[1]-(m-1)/2*h):h:(y[end]+(m-1)/2*h));
 
-    Xe = repmat(xe, 1, 2*m-1);
-    Ye = repmat(ye', 2*n-1,1);
+    Xe = repeat(xe, 1, 2*m-1);
+    Ye = repeat(ye', 2*n-1,1);
 
     R = sqrt(Xe.^2 + Ye.^2);
     # to avoid evaluating at the singularity
@@ -473,12 +487,12 @@ return Ge
 
 end
 
-function buildConvMatrix(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},D0::Complex128, h::Float64)
+function buildConvMatrix(k::Float64,X::Array{Float64,1},Y::Array{Float64,1},D0::Complex{Float64}, h::Float64)
     # function to build the convolution matrix
     @assert length(X) == length(Y)
     N = length(X);
 
-    G = zeros(Complex128, N, N);
+    G = zeros(Complex{Float64}, N, N);
 
     r = zeros(Float64,N)
     for ii = 1:N
@@ -501,7 +515,7 @@ end
 #   # we need to have an even number of points
 #   # We compute the entries for the matrix A using randomized methods
 #   @assert mod(length(X),2) == 1
-#   Entries  = Array{Complex128}[]
+#   Entries  = Array{Complex{Float64}}[]
 #   Indices  = Array{Int64}[]
 
 #   N = n*m;

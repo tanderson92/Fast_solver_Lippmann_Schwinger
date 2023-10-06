@@ -1,7 +1,7 @@
 # File containing all the preconditioners
 
 
-type doubleGSPreconditioner
+struct doubleGSPreconditioner
     n::Int64  # number of grid points in the x direction
     nSubs::Int64
     subDomains1
@@ -16,24 +16,24 @@ type doubleGSPreconditioner
         N = n*n; # we suppose that the domain is squared
         T = speye(N);
         index = 1:N;
-        index = (reshape(index, n,n).')[:];
+        index = (transpose(reshape(index, n,n)))[:];
         T = T[index,:];
         nSubs = length(subDomains1)
-        new(n,nSubs, subDomains1,subDomains2,Msp, T,T.', tol,precondtype) # don't know if it's the best answer
+        new(n,nSubs, subDomains1,subDomains2,Msp, T,transpose(T), tol,precondtype) # don't know if it's the best answer
     end
 end
 
 
-type SparsifyingPreconditioner
+struct SparsifyingPreconditioner
     Msp::SparseMatrixCSC{Complex{Float64},Int64}
     As::SparseMatrixCSC{Complex{Float64},Int64} # tranposition matrix
     MspInv
     solverType::String
     function SparsifyingPreconditioner(Msp, As; solverType::String="UMFPACK")
-        tic();
+        #@time
         if  solverType=="UMFPACK"
-            MspInv = lufact(Msp)
-            println("time for the factorization was ", toc() )
+            MspInv = lu(Msp)
+            #println("time for the factorization was ", @elapsed )
         end
         if  solverType=="MKLPARDISO"
             MspInv = MKLPardisoSolver();
@@ -44,7 +44,7 @@ type SparsifyingPreconditioner
             set_iparm!(MspInv,12,2)
             # setting the factoriation phase
             set_phase!(MspInv, 12)
-            X = zeros(Complex128, size(Msp)[2],1)
+            X = zeros(Complex{Float64}, size(Msp)[2],1)
             # factorizing the matrix
             pardiso(MspInv,X, Msp,X)
             # setting phase and parameters to solve and transposing the matrix
@@ -59,7 +59,7 @@ end
 
 
 
-type PolarizedTracesPreconditioner
+struct PolarizedTracesPreconditioner
     As::SparseMatrixCSC{Complex{Float64},Int64}
     subDomains
     IntegralPreconditioner
@@ -75,7 +75,7 @@ type PolarizedTracesPreconditioner
 end
 
 
-type GSPreconditioner
+struct GSPreconditioner
     n::Int64  # number of grid points in the x direction
     nSubs::Int64
     subDomains
@@ -89,7 +89,7 @@ type GSPreconditioner
 end
 
 
-type doublePreconditioner
+struct doublePreconditioner
     # Type definition for the bidirectional preconditioner
     As::SparseMatrixCSC{Complex{Float64},Int64}    # Sparsifying matrix
     Msp::SparseMatrixCSC{Complex{Float64},Int64}   # Sparsified system to solve
@@ -104,7 +104,7 @@ type doublePreconditioner
 end
 
 
-type Preconditioner
+struct Preconditioner
     As::SparseMatrixCSC{Complex{Float64},Int64}
     Msp::SparseMatrixCSC{Complex{Float64},Int64}
     GSPreconditioner
@@ -118,7 +118,7 @@ end
 # Encapsulation of the preconditioner in order to use preconditioned GMRES
 import Base.\
 
-function \(M::doubleGSPreconditioner, b::Array{Complex128,1})
+function \(M::doubleGSPreconditioner, b::Array{Complex{Float64},1})
     #println("Applying the polarized Traces Preconditioner")
 
     # TODO add more options to the type of preconditioner used
@@ -129,7 +129,7 @@ function \(M::doubleGSPreconditioner, b::Array{Complex128,1})
     return u-u2
 end
 
-function \(M::SparsifyingPreconditioner, b::Array{Complex128,1})
+function \(M::SparsifyingPreconditioner, b::Array{Complex{Float64},1})
     #println("Applying the polarized Traces Preconditioner")
 
     # TODO add more options to the type of preconditioner used
@@ -138,14 +138,33 @@ function \(M::SparsifyingPreconditioner, b::Array{Complex128,1})
         return M.MspInv\(M.As*b)
     elseif  M.solverType=="MKLPARDISO"
         set_phase!(M.MspInv, 33)
-        u = zeros(Complex128,length(b))
+        u = zeros(Complex{Float64},length(b))
         pardiso(M.MspInv, u, M.Msp, M.As*b)
         return u
     end
 end
 
+function LinearAlgebra.ldiv!(M::SparsifyingPreconditioner, b::AbstractArray{Complex{Float64},1})
+    #return M\b
+    #println("Applying the polarized Traces Preconditioner")
 
-function \(M::GSPreconditioner, b::Array{Complex128,1})
+    # TODO add more options to the type of preconditioner used
+    #return precondGS(M.subDomains, b)
+    if M.solverType=="UMFPACK"
+        return M.MspInv\(M.As*b)
+    elseif  M.solverType=="MKLPARDISO"
+        set_phase!(M.MspInv, 33)
+        u = zeros(Complex{Float64},length(b))
+        pardiso(M.MspInv, u, M.Msp, M.As*b)
+        return u
+    end
+end
+
+function LinearAlgebra.ldiv!(M::SparsifyingPreconditioner, b::Array{Complex{Float64},1})
+    return M\b
+end
+
+function \(M::GSPreconditioner, b::Array{Complex{Float64},1})
     #println("Applying the polarized Traces Preconditioner")
 
     # TODO add more options to the type of preconditioner used
@@ -153,14 +172,14 @@ function \(M::GSPreconditioner, b::Array{Complex128,1})
     return precondGSOptimized(M.subDomains, b)
 end
 
-function \(M::Preconditioner, b::Array{Complex128,1})
+function \(M::Preconditioner, b::Array{Complex{Float64},1})
     #println("Applying the sparsifying Preconditioner")
 
     y = zeros(b)
     # small
     if M.mkl_sparseBlas
         x0 = zeros(b);
-        beta = Complex128(1+0im)
+        beta = Complex{Float64}(1+0im)
         SparseBLAS.cscmv!('N',beta,"GXXF",M.As,b,beta,x0)
         #println("using sparse blas!")
     else
@@ -174,7 +193,7 @@ function \(M::Preconditioner, b::Array{Complex128,1})
 end
 
 
-function \(M::PolarizedTracesPreconditioner, b::Array{Complex128,1})
+function \(M::PolarizedTracesPreconditioner, b::Array{Complex{Float64},1})
     #println("Applying the sparsifying Preconditioner")
 
     f = extractRHS(M.subDomains, M.As*b);
@@ -195,7 +214,7 @@ function \(M::PolarizedTracesPreconditioner, b::Array{Complex128,1})
 end
 
 
-function \(M::doublePreconditioner, b::Array{Complex128,1})
+function \(M::doublePreconditioner, b::Array{Complex{Float64},1})
     #println("Applying the sparsifying Preconditioner")
 
     if M.maxIter != 0
@@ -203,7 +222,7 @@ function \(M::doublePreconditioner, b::Array{Complex128,1})
         # small if block to use sparse MKL
         if M.mkl_sparseBlas
             x0 = zeros(b);
-            beta = Complex128(1+0im)
+            beta = Complex{Float64}(1+0im)
             SparseBLAS.cscmv!('N',beta,"GXXF",M.As,b,beta,x0)
             #println("using sparse blas!")
         else
@@ -220,13 +239,13 @@ end
 
 # Gauss Seidel preconditioner
 # as explained in the paper (this needs 5 solves per iteration)
-function precondGS(subDomains, source::Array{Complex128,1})
+function precondGS(subDomains, source::Array{Complex{Float64},1})
     ## We are only implementing the Jacobi version of the preconditioner
     nSubs = length(subDomains);
 
     n = subDomains[1].n
     # building the local rhs
-    rhsLocal = [ zeros(Complex128,subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
+    rhsLocal = [ zeros(Complex{Float64},subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
 
     # copying the wave-fields
     for ii = 1:nSubs
@@ -235,10 +254,10 @@ function precondGS(subDomains, source::Array{Complex128,1})
 
     uLocalArray = [solve(subDomains[ii],rhsLocal[ii] )  for  ii = 1:nSubs]
 
-    u_0  = zeros(Complex128,n*nSubs)
-    u_1  = zeros(Complex128,n*nSubs)
-    u_n  = zeros(Complex128,n*nSubs)
-    u_np = zeros(Complex128,n*nSubs)
+    u_0  = zeros(Complex{Float64},n*nSubs)
+    u_1  = zeros(Complex{Float64},n*nSubs)
+    u_n  = zeros(Complex{Float64},n*nSubs)
+    u_np = zeros(Complex{Float64},n*nSubs)
 
     index = 1:n
 
@@ -281,7 +300,7 @@ function precondGS(subDomains, source::Array{Complex128,1})
         ind_np = subDomains[ii].ind_np
 
         # making a copy of the partitioned source
-        rhsLocaltemp = zeros(Complex128,size(rhsLocal[ii])[1]) ;
+        rhsLocaltemp = zeros(Complex{Float64},size(rhsLocal[ii])[1]) ;
 
         rhsLocaltemp[subDomains[ii].ind_0] =  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
         rhsLocaltemp[subDomains[ii].ind_1] = -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
@@ -304,7 +323,7 @@ function precondGS(subDomains, source::Array{Complex128,1})
         ind_np = subDomains[ii].ind_np
 
         # making a copy of the partitioned source
-        rhsLocaltemp = zeros(Complex128,size(rhsLocal[ii])[1]) ;
+        rhsLocaltemp = zeros(Complex{Float64},size(rhsLocal[ii])[1]) ;
 
         if ii != nSubs
 
@@ -342,7 +361,7 @@ function precondGS(subDomains, source::Array{Complex128,1})
         ind_np = subDomains[ii].ind_np
 
         # making a copy of the parititioned source (we may need a sparse source)
-        rhsLocaltemp = zeros(Complex128,size(rhsLocal[ii])[1]) ;
+        rhsLocaltemp = zeros(Complex{Float64},size(rhsLocal[ii])[1]) ;
 
         rhsLocaltemp[subDomains[ii].ind_np] =  subDomains[ii].H[ind_np,ind_n]*u_0[(ii)*n + index]
         rhsLocaltemp[subDomains[ii].ind_n]  = -subDomains[ii].H[ind_n,ind_np]*u_1[(ii)*n + index]
@@ -356,7 +375,7 @@ function precondGS(subDomains, source::Array{Complex128,1})
 
     # reconstruction
 
-    uPrecond = Complex128[]
+    uPrecond = Complex{Float64}[]
 
     for ii = 1:nSubs
 
@@ -388,13 +407,13 @@ function precondGS(subDomains, source::Array{Complex128,1})
 end
 
 # Jacobi preconditioner
-function precondJacobi(subDomains, source::Array{Complex128,1})
+function precondJacobi(subDomains, source::Array{Complex{Float64},1})
     ## We are only implementing the Jacobi version of the preconditioner
     nSubs = length(subDomains);
 
     n = subDomains[1].n
     # building the local rhs
-    rhsLocal = [ zeros(Complex128,subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
+    rhsLocal = [ zeros(Complex{Float64},subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
 
     # copying the wave-fields
     for ii = 1:nSubs
@@ -403,10 +422,10 @@ function precondJacobi(subDomains, source::Array{Complex128,1})
 
     uLocalArray = [solve(subDomains[ii],rhsLocal[ii] )  for  ii = 1:nSubs]
 
-    u_0  = zeros(Complex128,n*nSubs)
-    u_1  = zeros(Complex128,n*nSubs)
-    u_n  = zeros(Complex128,n*nSubs)
-    u_np = zeros(Complex128,n*nSubs)
+    u_0  = zeros(Complex{Float64},n*nSubs)
+    u_1  = zeros(Complex{Float64},n*nSubs)
+    u_n  = zeros(Complex{Float64},n*nSubs)
+    u_np = zeros(Complex{Float64},n*nSubs)
 
     index = 1:n
 
@@ -448,7 +467,7 @@ function precondJacobi(subDomains, source::Array{Complex128,1})
         ind_np = subDomains[ii].ind_np
 
         # making a copy of the partitioned source
-        rhsLocaltemp = zeros(Complex128,size(rhsLocal[ii])[1]) ;
+        rhsLocaltemp = zeros(Complex{Float64},size(rhsLocal[ii])[1]) ;
 
         rhsLocaltemp[subDomains[ii].ind_0] =  subDomains[ii].H[ind_0,ind_1]*u_np[(ii-2)*n + index]
         rhsLocaltemp[subDomains[ii].ind_1] = -subDomains[ii].H[ind_1,ind_0]*u_n[(ii-2)*n + index]
@@ -474,7 +493,7 @@ function precondJacobi(subDomains, source::Array{Complex128,1})
         ind_np = subDomains[ii].ind_np
 
         # making a copy of the parititioned source (we may need a sparse source)
-        rhsLocaltemp = zeros(Complex128,size(rhsLocal[ii])[1]) ;
+        rhsLocaltemp = zeros(Complex{Float64},size(rhsLocal[ii])[1]) ;
 
         rhsLocaltemp[subDomains[ii].ind_np] =  subDomains[ii].H[ind_np,ind_n]*u_0[(ii)*n + index]
         rhsLocaltemp[subDomains[ii].ind_n]  = -subDomains[ii].H[ind_n,ind_np]*u_1[(ii)*n + index]
@@ -488,7 +507,7 @@ function precondJacobi(subDomains, source::Array{Complex128,1})
 
     # reconstruction
 
-    uPrecond = Complex128[]
+    uPrecond = Complex{Float64}[]
 
     for ii = 1:nSubs
 
@@ -524,21 +543,21 @@ end
 # this one uses the Polarization conditions to reduce the number of
 # solves per iteration (we went from 5 to only two)
 # This version reduces the allocations by 10%
-function precondGSOptimized(subDomains, source::Array{Complex128,1})
+function precondGSOptimized(subDomains, source::Array{Complex{Float64},1})
     ## We are only implementing the Gauss-Seidel version of the preconditioner
     nSubs = length(subDomains);
 
     n = subDomains[1].n
     # building the local rhs
-    rhsLocal = [ zeros(Complex128,subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
+    rhsLocal = [ zeros(Complex{Float64},subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
 
     localSizes = zeros(Int64,nSubs)
 
     # allocating spzce for the boundary data
-    u_0  = zeros(Complex128,n*nSubs)
-    u_1  = zeros(Complex128,n*nSubs)
-    u_n  = zeros(Complex128,n*nSubs)
-    u_np = zeros(Complex128,n*nSubs)
+    u_0  = zeros(Complex{Float64},n*nSubs)
+    u_1  = zeros(Complex{Float64},n*nSubs)
+    u_n  = zeros(Complex{Float64},n*nSubs)
+    u_np = zeros(Complex{Float64},n*nSubs)
 
     index = 1:n
 
@@ -573,7 +592,7 @@ function precondGSOptimized(subDomains, source::Array{Complex128,1})
 
     # Upward sweep + reflections + reconstruction
     # allocating space for the solution
-    uPrecond = zeros(Complex128, length(source))
+    uPrecond = zeros(Complex{Float64}, length(source))
 
     for ii = nSubs:-1:1
 
