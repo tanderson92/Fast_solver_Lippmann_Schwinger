@@ -10,7 +10,7 @@ struct Subdomain
     ind_n::Array{Int64,1}
     ind_np::Array{Int64,1}
     Hinv
-    H #::SparseMatrixCSC{Complex128,Int64}
+    H #::SparseMatrixCSC{Complex{Float64},Int64}
     # removed in order to have a faster PARDISO call
     x
     y
@@ -125,7 +125,7 @@ function factorize!(subdomain::Subdomain)
             set_iparm!(subdomain.Hinv,12,2)
             # setting the factoriation phase
             set_phase!(subdomain.Hinv, 12)
-            X = zeros(Complex128, subdomain.n*subdomain.m,1)
+            X = zeros(Complex{Float64}, subdomain.n*subdomain.m,1)
             # factorizing the matrix
             pardiso(subdomain.Hinv,X, subdomain.H,X)
             # setting phase and parameters to solve and transposing the matrix
@@ -139,13 +139,13 @@ end
 
 function convert64_32!(subdomain::Subdomain)
     if subdomain.solvertype == "MKLPARDISO"
-        subdomain.H = SparseMatrixCSC{Complex128,Int32}(subdomain.H)
+        subdomain.H = SparseMatrixCSC{Complex{Float64},Int32}(subdomain.H)
     else
         println("This method is only to make PARDISO more efficient")
     end
 end
 
-function solve(subdomain::Subdomain, f::Array{Complex128,1})
+function solve(subdomain::Subdomain, f::Array{Complex{Float64},1})
     # u = solve(subdomain::Subdomain, f)
     # function that solves the system Hu=f in the subdomain
     # check size
@@ -156,7 +156,7 @@ function solve(subdomain::Subdomain, f::Array{Complex128,1})
         # if the linear solvers is MKL Pardiso
         if subdomain.solvertype == "MKLPARDISO"
             set_phase!(subdomain.Hinv, 33)
-            u = zeros(Complex128,length(f))
+            u = zeros(Complex{Float64},length(f))
             pardiso(subdomain.Hinv, u, subdomain.H, f)
         end
 
@@ -167,7 +167,7 @@ function solve(subdomain::Subdomain, f::Array{Complex128,1})
     end
 end
 
-function solve(subdomain::Subdomain, f::Array{Complex128,2})
+function solve(subdomain::Subdomain, f::Array{Complex{Float64},2})
     # u = solve(subdomain::Subdomain, f)
     # function that solves the system Hu=f in the subdomain
     # check size
@@ -209,8 +209,8 @@ function extractBoundaryData(subdomain::Subdomain, u)
 end
 
 
-function applyBlockOperator(subdomain::Subdomain,v0::Array{Complex128,1},v1::Array{Complex128,1},
-                            vN::Array{Complex128,1},vNp::Array{Complex128,1})
+function applyBlockOperator(subdomain::Subdomain,v0::Array{Complex{Float64},1},v1::Array{Complex{Float64},1},
+                            vN::Array{Complex{Float64},1},vNp::Array{Complex{Float64},1})
     # function to apply the local matricial operator to the interface data
     # and we sample it at the interface
     # allocating the source
@@ -238,8 +238,8 @@ function applyBlockOperator(subdomain::Subdomain,v0::Array{Complex128,1},v1::Arr
 end
 
 # version of the block operator to act for multiple right-hand side
-function applyBlockOperator(subdomain::Subdomain, v0::Array{Complex128,2},v1::Array{Complex128,2},
-                            vN::Array{Complex128,2},vNp::Array{Complex128,2})
+function applyBlockOperator(subdomain::Subdomain, v0::Array{Complex{Float64},2},v1::Array{Complex{Float64},2},
+                            vN::Array{Complex{Float64},2},vNp::Array{Complex{Float64},2})
     # function to apply the local matricial operator to the interface data
     # and we sample it at the interface
     nrhs =  size(v0)[2]
@@ -272,7 +272,7 @@ end
 
 
 
-function solveLocal(subDomains, source::Array{Complex128,1})
+function solveLocal(subDomains, source::Array{Complex{Float64},1})
     # function that solves all the local problems given a globally
     # defined source
 
@@ -288,7 +288,7 @@ function solveLocal(subDomains, source::Array{Complex128,1})
     return uLocalArray
 end
 
-function sourcePartition(subDomains, source::Array{Complex128,1})
+function sourcePartition(subDomains, source::Array{Complex{Float64},1})
 
     println("partitioning the source")
     # partitioning the source % TODO make it a function
@@ -296,7 +296,7 @@ function sourcePartition(subDomains, source::Array{Complex128,1})
 
     n = subDomains[1].n
     # building the local rhs
-    rhsLocal = [ zeros(Complex128,subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
+    rhsLocal = [ zeros(Complex{Float64},subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
 
     # copying the wave-fields
     for ii = 1:nSubs
@@ -318,10 +318,10 @@ function extractFullBoundaryData(subDomains, uLocalArray)
 
     n = subDomains[1].n
 
-    u_0  = zeros(Complex128,n*nSubs)
-    u_1  = zeros(Complex128,n*nSubs)
-    u_n  = zeros(Complex128,n*nSubs)
-    u_np = zeros(Complex128,n*nSubs)
+    u_0  = zeros(Complex{Float64},n*nSubs)
+    u_1  = zeros(Complex{Float64},n*nSubs)
+    u_n  = zeros(Complex{Float64},n*nSubs)
+    u_np = zeros(Complex{Float64},n*nSubs)
 
     index = 1:n
 
@@ -350,7 +350,7 @@ function extractFullBoundaryData(subDomains, uLocalArray)
 
 end
 
-function extractRHS(subDomains,source::Array{Complex128,1})
+function extractRHS(subDomains,source::Array{Complex{Float64},1})
     #function to produce and extra the rhs
 
     uLocalArray = solveLocal(subDomains, source)
@@ -404,10 +404,10 @@ function devectorizeBdyDataContiguous(subArray, uGamma)
     nSurf = subArray[1].n;
     nInd = 1:nSurf;
 
-    v0  = zeros(Complex128, nSurf*nLayer);
-    v1  = zeros(Complex128, nSurf*nLayer);
-    vN  = zeros(Complex128, nSurf*nLayer);
-    vNp = zeros(Complex128, nSurf*nLayer);
+    v0  = zeros(Complex{Float64}, nSurf*nLayer);
+    v1  = zeros(Complex{Float64}, nSurf*nLayer);
+    vN  = zeros(Complex{Float64}, nSurf*nLayer);
+    vNp = zeros(Complex{Float64}, nSurf*nLayer);
 
     for ii = 1:nLayer
         if ii == 1
@@ -882,8 +882,8 @@ function generatePermutationMatrix(n::Int64,nSubs::Int64 )
     nInd = 1:n;
     nSurf = n;
     E = speye(4*(nSubs-1));
-    p_aux   = kron(linspace(1, 2*(nSubs-1)-1, nSubs-1 ).', [1 1]) + kron(ones(1,nSubs-1), [0 2*(nSubs-1) ]);
-    p_aux_2 = kron(linspace(2, 2*(nSubs-1) , nSubs-1 ).', [1 1]) + kron(ones(1,nSubs-1), [2*(nSubs-1) 0]);
+    p_aux   = kron(transpose(LinRange(1, 2*(nSubs-1)-1, nSubs-1 )), [1 1]) + kron(ones(1,nSubs-1), [0 2*(nSubs-1) ]);
+    p_aux_2 = kron(transpose(LinRange(2, 2*(nSubs-1) , nSubs-1 )), [1 1]) + kron(ones(1,nSubs-1), [2*(nSubs-1) 0]);
     p = E[vec(hcat(round(Int64,p_aux), round(Int64,p_aux_2))),: ];
     P = kron(p, speye(nSurf));
     return P;
@@ -897,7 +897,7 @@ function reconstruction(subDomains, source, u0, u1, un, unp)
     localSizes = zeros(Int64,nSubs)
     n = subDomains[1].n
     # building the local rhs
-    rhsLocal = [ zeros(Complex128,subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
+    rhsLocal = [ zeros(Complex{Float64},subDomains[ii].n*subDomains[ii].m) for ii = 1:nSubs ]
 
     # copying the wave-fields
     for ii = 1:nSubs
@@ -909,7 +909,7 @@ function reconstruction(subDomains, source, u0, u1, un, unp)
     # obtaining the limit of each subdomain within the global approximated solution
     localLim = [0; cumsum(localSizes)];
 
-    uPrecond = zeros(Complex128, length(source))
+    uPrecond = zeros(Complex{Float64}, length(source))
     index = 1:n
 
     for ii = 1:nSubs

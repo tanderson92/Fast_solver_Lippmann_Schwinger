@@ -1,4 +1,3 @@
-
 using GSL
 
 function gaussLegendreQuad(N::Int64,a::Float64 ,b::Float64)
@@ -12,7 +11,7 @@ function gaussLegendreQuad(N::Int64,a::Float64 ,b::Float64)
     xu = linspace(-1, 1, n1)
 
     # Initial guess
-    y = cos((2*(0:n)'+1)*pi/(2*n+2))+(0.27/n1)*sin(pi*xu.'*n/n2)
+    y = cos((2*(0:n)'+1)*pi/(2*n+2))+(0.27/n1)*sin(pi*transpose(xu)*n/n2)
     y = y[:]
 
     # Derivative of LGVM
@@ -75,11 +74,11 @@ function evalPhi(M::Int64,y::Float64,x::Array{Float64,1}; weak = true, singular 
     end
     if singular
     # polynomials times 1/(y-x)
-    Phi = [Phi; pxi.*( 1./(YminusX)) ]
+    Phi = [Phi; pxi.*( 1 ./(YminusX)) ]
     end
     if hyper
     # polynomials times 1/(y-x).^2
-    Phi = [Phi; pxi.*( 1./(YminusX).^2) ]
+    Phi = [Phi; pxi.*( 1 ./(YminusX).^2) ]
     end
     # if we ever run into a singularity (just remove it)
     Phi[Phi.==Inf] = 0
@@ -149,7 +148,7 @@ function legendreInterpMatrix( s::Array{Float64,1}, x::Array{Float64,1}, w::Arra
     n = length(x);
     LegendrePol = evalLegendrePol(n,x)
     LegendreInterp = evalLegendrePol(n,s)
-    return  LegendreInterp*(diagm((2*(0:n-1)+1)/2))*(LegendrePol.')*diagm(w)
+    return  LegendreInterp*(diagm((2*(0:n-1)+1)/2))*(transpose(LegendrePol))*diagm(w)
 end
 
 function modifiedGLWeights3( w::Array{Float64,1},x::Array{Float64,1},y::Float64 )
