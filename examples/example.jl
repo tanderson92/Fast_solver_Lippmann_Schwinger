@@ -12,6 +12,7 @@ using SharedArrays
 using LinearAlgebra
 using FFTW
 using Pardiso
+using LinearMaps
 
 
 include("../src/SparsifyingMatrix2D.jl")
@@ -21,8 +22,8 @@ include("../src/preconditioner.jl")
 # setting the number of threads for the FFT and BLAS
 # libraries (please set them to match the number of
 # physical cores in your system)
-FFTW.set_num_threads(4);
-BLAS.set_num_threads(4);
+FFTW.set_num_threads(16);
+BLAS.set_num_threads(16);
 
 
 #Defining Omega
@@ -39,7 +40,7 @@ X = repeat(x, 1, m)[:]
 Y = repeat(y', n,1)[:]
 # we solve \triangle u + k^2(1 + nu(x))u = 0
 
-# We use the modified quadrature in Ruan and Rohklin
+# We use the modified quadrature in Duan and Rohklin
 (ppw,D) = referenceValsTrapRule();
 D0 = D[1];
 
@@ -50,19 +51,26 @@ nu(x,y) = @. 0.3*exp(-40*(x.^2 + y.^2)).*(abs(x).<0.48).*(abs(y).<0.48);
 # fastconv = buildFastConvolution(x,y,h,k,nu)
 
 # or Greengard Vico Quadrature (this is not optimized and is 2-3 times slower)
-fastconv = buildFastConvolution(x,y,h,k,nu, quadRule = "Greengard_Vico");
+fastconv = buildFastConvolution(x, y, h, k, nu, quadRule = "Greengard_Vico");
+
+# wrapper for linear maps
+function apply_conv!(x)
+    return fastconvolution(fastconv,x) 
+end
+
+convolution_map = LinearMap(apply_conv!, 40401; issymmetric=false, ismutating=false)
 
 # assembling the sparsifiying preconditioner
-@time As = buildSparseA(k,X,Y,D0, n ,m);
+@time As = buildSparseA(k, X, Y, D0, n, m);
 
 # assembling As*( I + k^2G*nu)
-@time Mapproxsp = As + k^2*(buildSparseAG(k,X,Y,D0, n ,m)*spdiagm(nu(X,Y)));
+@time Mapproxsp = As + k^2*(buildSparseAG(k, X, Y, D0, n ,m)*spdiagm(nu(X,Y)));
 
 # defining the preconditioner
 # # We use UMFPACK by default
-# precond = SparsifyingPreconditioner(Mapproxsp, As)
+precond = SparsifyingPreconditioner(Mapproxsp, As);
 # We use MKLPARDISO
-precond = SparsifyingPreconditioner(Mapproxsp, As; solverType="MKLPARDISO")
+# precond = SparsifyingPreconditioner(Mapproxsp, As; solverType="MKLPARDISO")
 
 # building the RHS from the incident field
 u_inc = exp.(k*im*X);
@@ -73,11 +81,16 @@ rhs = -k^2*FFTconvolution(fastconv, nu(X,Y).*u_inc) ;
 # allocating the solution
 u = zeros(Complex{Float64},N);
 
-## TODO / FIXME Either with / without the preconditioner I see LAPACKEXception(1)
 # solving the system using GMRES
-#@time info =  gmres!(u, fastconv, rhs, Pl = precond, log = true)
+@time info =  gmres!(u, fastconv, rhs, Pl=precond, log = true)
+println(info[2].data[:resnorm])
+println(size(info[2].data[:resnorm]))
+
+
+u = zeros(Complex{Float64},N);
 @time info =  gmres!(u, fastconv, rhs, log = true)
 println(info[2].data[:resnorm])
+println(size(info[2].data[:resnorm]))
 
 # plotting the solution
 figure(1)

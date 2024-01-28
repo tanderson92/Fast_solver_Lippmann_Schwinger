@@ -145,24 +145,35 @@ function \(M::SparsifyingPreconditioner, b::Array{Complex{Float64},1})
 end
 
 function LinearAlgebra.ldiv!(M::SparsifyingPreconditioner, b::AbstractArray{Complex{Float64},1})
-    #return M\b
-    #println("Applying the polarized Traces Preconditioner")
+"""Wrapper for the application of the preconditioner.
+    Args:
+        M: The class with all the necessary machinery for the preconditoner.
+        b: Righ-hand side to apply the preconditioner to, here we condiser an AbstractArray.
 
-    # TODO add more options to the type of preconditioner used
+    Returns:
+        The application of M to b, in the form a left division.
+""" 
+
     #return precondGS(M.subDomains, b)
     if M.solverType=="UMFPACK"
-        return M.MspInv\(M.As*b)
+        b[:] = M.MspInv\(M.As*b)
     elseif  M.solverType=="MKLPARDISO"
         set_phase!(M.MspInv, 33)
         u = zeros(Complex{Float64},length(b))
         pardiso(M.MspInv, u, M.Msp, M.As*b)
-        return u
+        b[:] = u
     end
 end
 
 function LinearAlgebra.ldiv!(M::SparsifyingPreconditioner, b::Array{Complex{Float64},1})
-    return M\b
+    b[:] =  M\b
 end
+
+# function LinearAlgebra.ldiv!(x::Array{Complex{Float64},1},
+#                              M::SparsifyingPreconditioner,
+#                              b::Array{Complex{Float64},1})
+#     x[:] = M\b
+# end
 
 function \(M::GSPreconditioner, b::Array{Complex{Float64},1})
     #println("Applying the polarized Traces Preconditioner")

@@ -5,7 +5,8 @@
 include("Functions.jl")
 
 using SpecialFunctions
-
+using LinearAlgebra
+using Distributed
 
 struct FastM
     # type to encapsulate the fast application of M = I + omega^2G*spadiagm(nu)
@@ -28,24 +29,29 @@ end
 import Base.*
 
 function Base.size(v::FastM, dim)
-  size(v.nu, dim)
+  size(v.nu, 1)
 end
 
-#function LinearAlgebra.mul!(Y::Vector{Complex{Float64}},M::FastM,b::Vector{Complex{Float64}},α::Bool,β::Bool)
-#  Y = α * fastconvolution(M,b) + β*Y
-#end
-
-function LinearAlgebra.mul!(Y::AbstractArray{Complex{Float64},1},M::FastM,b::AbstractArray{Complex{Float64},1},α::Bool,β::Bool)
-  Y = α * fastconvolution(M,b) + β*Y
+function Base.size(v::FastM)
+  (size(v.nu), size(v.nu))
 end
 
-function *(M::FastM, b::Array{Complex{Float64},1})
-    # function to overload the applyication of
-    # M using a Toeplitz reduction via a FFT
-    # dummy function to call fastconvolution
-    return fastconvolution(M,b)
+function Base.eltype(v::FastM)
+  eltype(v.GFFT)
 end
 
+function *(M::FastM, b::AbstractArray{Complex{Float64},1})
+  # function to overload the applyication of
+  # M using a Toeplitz reduction via a FFT
+  # dummy function to call fastconvolution
+  return fastconvolution(M,b)
+end
+
+function LinearAlgebra.mul!(Y::AbstractArray{Complex{Float64},1},
+                            M::FastM,
+                            b::AbstractArray{Complex{Float64},1})
+  Y[:] = M*b 
+end
 
 
 
@@ -99,6 +105,7 @@ end
     # returning b + G*(b nu)
     return (b + B[:])
 end
+
 
 @inline function FFTconvolution(M::FastM, b::Array{Complex{Float64},1})
     # function to overload the applyication of
@@ -301,7 +308,7 @@ end
 
 
 ## TODO: parallelize the sampling of the 3D Green's function
-# @everywhere function sampleG3DParallel(k,X,Y,Z, indS, D0)
+# Distributed.@everywhere function sampleG3DParallel(k,X,Y,Z, indS, D0)
 #   # function to sample the Green's function at frequency k
 
 #   R  = SharedArray(Float64, length(indS), length(X))
@@ -364,7 +371,7 @@ function sampleGkernelpar(k,R::Array{Float64,2},h)
   return sdata(G)
 end
 
-@everywhere function sampleGkernelpar(k,R::SharedArray{Float64,2},h)
+Distributed.@everywhere function sampleGkernelpar(k,R::SharedArray{Float64,2},h)
   (m,n)  = size(R)
   #println("Sample kernel parallel loop with chunks 2 ")
   G = SharedArray{Complex{Float64}}(m,n)
@@ -378,9 +385,9 @@ end
 
 
 # little convenience wrapper
-@everywhere sampleGkernel_shared_chunk!(q,u,k,h) = sampleGkernel_chunk!(q,u,k,h, myrange(q)...)
+Distributed.@everywhere sampleGkernel_shared_chunk!(q,u,k,h) = sampleGkernel_chunk!(q,u,k,h, myrange(q)...)
 
-@everywhere @inline function sampleGkernel_chunk!(G, R,k::Float64,h::Float64,
+Distributed.@everywhere @inline function sampleGkernel_chunk!(G, R,k::Float64,h::Float64,
                                                   irange::UnitRange{Int64}, jrange::UnitRange{Int64})
     #@show (irange, jrange)  # display so we can see what's happening
     # println(myid())

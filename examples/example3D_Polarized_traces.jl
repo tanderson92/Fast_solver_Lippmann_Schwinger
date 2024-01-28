@@ -1,7 +1,8 @@
-# small scrip to compute the solution of Lippmann-Schwinger equation
-# We test the types introduced in FastConvolution.jl
-# we test that the application is fast and that the construction
-# is performed fast.
+"""Small scrip to compute the solution of Lippmann-Schwinger equation.
+
+    We test the types introduced in FastConvolution.jl
+    we test that the application is fast and that the construction is performed fast.
+"""
 
 using PyPlot
 using IterativeSolvers
@@ -10,7 +11,7 @@ include("../src/SparsifyingMatrix3D.jl")
 include("../src/preconditioner.jl")
 
 
-# setting the number of threads for the FFT and BLAS
+# Setting the number of threads for the FFT and BLAS
 # libraries (please set them to match the number of
 # physical cores in your system)
 FFTW.set_num_threads(4);
@@ -37,7 +38,8 @@ for i=1:n, j=1:m, p=1:l
     Z[i,j,p] =  z[p];
 end
 X = X[:]; Y = Y[:]; Z = Z[:];
-# we solve \triangle u + k^2(1 + nu(x))u = 0
+
+# We solve \triangle u + k^2(1 + nu(x))u = 0
 
 # Defining the smooth perturbation of the slowness
 nu(x,y,z) = 0.3*exp(-40*(x.^2 + y.^2 + z.^2)).*(abs(x).<0.48).*(abs(y).<0.48).*(abs(z).<0.48);

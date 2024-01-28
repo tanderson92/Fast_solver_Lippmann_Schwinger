@@ -4,10 +4,10 @@
 include("FastConvolution.jl")
 
 
-type FastM3D
+struct FastM3D
     ## we may want to add an FFT plan to make the evaluation faster
-    # type to encapsulate the fast application of M = I + omega^2G*spadiagm(nu)
-    GFFT :: Array{Complex128,3}
+    # struct to encapsulate the fast application of M = I + omega^2G*spadiagm(nu)
+    GFFT :: Array{Complex{Float64},3}
     nu :: Array{Float64,1}
     # number of points in the extended domain
     ne :: Int64
@@ -28,7 +28,7 @@ end
 import Base.*
 
 
-function *(M::FastM3D, b::Array{Complex128,1}; verbose::Bool=false)
+function *(M::FastM3D, b::Array{Complex{Float64},1}; verbose::Bool=false)
     # multiply by nu, compute the convolution and then
     # multiply by omega^2
     B = M.omega^2*(FFTconvolution(M,M.nu.*b, verbose=verbose))
@@ -36,16 +36,16 @@ function *(M::FastM3D, b::Array{Complex128,1}; verbose::Bool=false)
     return (b + B)
 end
 
-@inline function FFTconvolution(M::FastM3D, b::Array{Complex128,1};
+@inline function FFTconvolution(M::FastM3D, b::Array{Complex{Float64},1};
                                 verbose::Bool=false )
     # function to compute the convolution with the convolution kernel
-    # defined within the FastM3D type using the FFT
+    # defined within the FastM3D struct using the FFT
     # TODO add a fft plan in here to accelerate the speed
-    # input: M::FastM3D type containing the convolution kernel
-    #        b::Array{Complex128,1} vector to apply the conv kernel
+    # input: M::FastM3D struct containing the convolution kernel
+    #        b::Array{Complex{Float64},1} vector to apply the conv kernel
     verbose && println("Application of the 3D convolution")
     # Allocate the space for the extended B
-    BExt = zeros(Complex128,M.ne, M.ne, M.le);
+    BExt = zeros(Complex{Float64},M.ne, M.ne, M.le);
     # zero padding
     BExt[1:M.n,1:M.m,1:M.l]= reshape(b,M.n,M.m,M.l) ;
 
@@ -92,7 +92,7 @@ function buildFastConvolution3D(x,y,z,X,Y,Z,h,k,nu; quadRule::String = "Greengar
         ### GFFT = [ Gtruncated3D(L,k,sqrt(kx[i]^2 + ky[j]^2 + kz[p]^2)) for i=1:4*n, j=1:4*m, p=1:4*l]
 
         # Computing the convolution kernel (we just use a for loop in order to save memory)
-        GFFT = zeros(Complex128, 4*n, 4*m, 4*l)
+        GFFT = zeros(Complex{Float64}, 4*n, 4*m, 4*l)
 
         for ii=1:4*n, jj=1:4*m, pp=1:4*l
           GFFT[ii,jj,pp]  = Gtruncated3D(L,k,sqrt(kx[ii]^2 + ky[jj]^2 + kz[pp]^2));
@@ -118,7 +118,7 @@ function buildFastConvolution3D(x,y,z,X,Y,Z,h,k,nu; quadRule::String = "Greengar
         ### GFFT = [ Gtruncated3D(L,k,sqrt(kx[i]^2 + ky[j]^2 + kz[p]^2)) for i=1:4*n-3, j=1:4*m-3, p=1:4*l-3 ]
 
         # Computing the convolution kernel (we just use a for loop in order to save memory)
-        GFFT = zeros(Complex128, 4*n-3, 4*m-3, 4*l-3)
+        GFFT = zeros(Complex{Float64}, 4*n-3, 4*m-3, 4*l-3)
 
         # This loop can be easily parallelized
         for i=1:4*n-3, j=1:4*m-3, p=1:4*l-3
@@ -140,17 +140,17 @@ end
   #           Y: mesh contaning the Y position of each point
   #           Z: mesh contaning the Y position of each point
   #           indS: indices in which the sources are located
-  #           fastconv: FastM3D type for the application of the
+  #           fastconv: FastM3D struct for the application of the
   #                     discrete convolution kernel
 
-  R  = zeros(Complex128, length(indS), length(X))
+  R  = zeros(Complex{Float64}, length(indS), length(X))
    for i = 1:length(indS)
       #for i = 1:length(indS)
       ii = indS[i]
       R[i,ii] = 1;
     end
 
-   Gc =  zeros(Complex128, length(indS), length(X))
+   Gc =  zeros(Complex{Float64}, length(indS), length(X))
    # this can be parallelized but then, we may have cache
    # aceess problem
     for i = 1:length(indS)
@@ -225,7 +225,7 @@ end
 # @everywhere function sampleGkernelparTruncated3D(k,r::Array{Float64,1},h)
 #   n  = length(r)
 #   println("Sample kernel parallel loop ")
-#   G = SharedArray(Complex128,n)
+#   G = SharedArray(Complex{Float64},n)
 #   rshared = convert(SharedArray, r)
 #   @sync @parallel for ii = 1:n
 #           @inbounds  G[ii] = 1im/4*hankelh1(0, k*rshared[ii])*h^2;
@@ -238,7 +238,7 @@ end
 # @everywhere function sampleGkernelpar(k,R::Array{Float64,2},h)
 #   (m,n)  = size(R)
 #   println("Sample kernel parallel loop with chunks ")
-#   G = SharedArray(Complex128,m,n)
+#   G = SharedArray(Complex{Float64},m,n)
 #   @time Rshared = convert(SharedArray, R)
 #   @sync begin
 #         for p in procs(G)
