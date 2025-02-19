@@ -7,6 +7,7 @@ include("Functions.jl")
 using SpecialFunctions
 using LinearAlgebra
 using Distributed
+using SparseArrays
 
 struct FastM
     # type to encapsulate the fast application of M = I + omega^2G*spadiagm(nu)
@@ -173,7 +174,8 @@ function buildFastConvolution(x::Array{Float64,1},y::Array{Float64,1},
   if quadRule == "trapezoidal"
 
     (ppw,D) = referenceValsTrapRule();
-    D0      = D[round(Int,k*h)];
+    #D0      = D[round(Int,k*h)];
+    D0      = D[1];
     (n,m) = length(x), length(y)
     Ge    = buildGConv(x,y,h,n,m,D0,k);
     GFFT  = fft(Ge);
